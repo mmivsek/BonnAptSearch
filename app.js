@@ -328,7 +328,10 @@ map.getPane("lines").style.zIndex = 350;
 const lineRenderer = L.canvas({ pane: "lines", tolerance: 6 });
 const lineLayer = L.layerGroup().addTo(map);
 const LINES = { rail: null, bus: null };
-let linesOn = { rail: false, bus: false, ...store.get("linesOn", {}) };
+let linesOn = { rail: false, bus: false, hideLongDistance: true, ...store.get("linesOn", {}) };
+// ICE, IC, EC, night trains (NJ/EN), European Sleeper, Flixtrain
+const isLongDistance = (l) => l.mode === "train" && /^(ICE|IC|ECE|EC|NJ|EN|ES|FLX|TGV|RJX?)(\s|\d|$)/i.test(l.ref);
+const lineVisible = (l) => !(linesOn.hideLongDistance && isLongDistance(l));
 let activeLine = null;
 const MODE_LABEL = { train: "Train", tram: "Stadtbahn / tram", bus: "Bus" };
 
@@ -352,7 +355,7 @@ const chipHTML = (l) => `<button type="button" class="line-chip${activeLine === 
 function renderLines() {
   lineLayer.clearLayers();
   const shown = [];
-  for (const kind of ["rail", "bus"]) if (linesOn[kind] && LINES[kind]) shown.push(...LINES[kind]);
+  for (const kind of ["rail", "bus"]) if (linesOn[kind] && LINES[kind]) shown.push(...LINES[kind].filter(lineVisible));
   const active = allLines().find((l) => l.id === activeLine);
   if (active && !shown.includes(active)) shown.push(active);
   for (const l of shown) {
@@ -381,7 +384,7 @@ function renderLineChips() {
   const box = $("#line-chips");
   const groups = [["train", "Trains & S-Bahn"], ["tram", "Stadtbahn / tram"], ["bus", "Buses"]];
   box.innerHTML = groups.map(([mode, label]) => {
-    const ls = allLines().filter((l) => l.mode === mode && (mode === "bus" ? linesOn.bus : linesOn.rail));
+    const ls = allLines().filter((l) => l.mode === mode && (mode === "bus" ? linesOn.bus : linesOn.rail) && lineVisible(l));
     if (!ls.length) return "";
     return `<details class="line-group" ${mode !== "bus" || ls.length < 40 ? "open" : ""}><summary>${label} (${ls.length})</summary><div class="chips">${ls.map(chipHTML).join("")}</div></details>`;
   }).join("");
@@ -430,6 +433,17 @@ for (const kind of ["rail", "bus"]) {
     linesOn = { ...linesOn, [kind]: cb.checked };
     store.set("linesOn", linesOn);
     if (cb.checked) await loadLines(kind);
+    renderLines();
+  });
+}
+{
+  const cb = $("#lines-hide-ld");
+  cb.checked = linesOn.hideLongDistance;
+  cb.addEventListener("change", () => {
+    linesOn = { ...linesOn, hideLongDistance: cb.checked };
+    store.set("linesOn", linesOn);
+    const act = allLines().find((l) => l.id === activeLine);
+    if (act && !lineVisible(act)) activeLine = null;
     renderLines();
   });
 }
