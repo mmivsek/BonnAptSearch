@@ -203,6 +203,7 @@ function setFilters(patch) {
   store.set("filters", filters);
   for (const cat of ["gym", "discounter"]) rebuildMarkers(cat);
   renderApts();
+  renderHeat();
   if (selectedId) selectApt(selectedId, { keepView: true }); else analyzeRest();
 }
 
@@ -417,6 +418,143 @@ async function initLines() {
   for (const kind of ["rail", "bus"]) if (linesOn[kind]) await loadLines(kind);
   renderLines();
 }
+
+// ---------- neighbourhood heatmap ----------
+map.createPane("heat");
+map.getPane("heat").style.zIndex = 300;
+const heatRenderer = L.canvas({ pane: "heat" });
+const heatLayer = L.layerGroup();
+const HEAT = { box: { s: 50.655, w: 7.025, n: 50.775, e: 7.205 }, stepM: 250 };
+let heatStops = null, heatStopsKey = null, heatLegend = null;
+const heatCells = new Map();
+let heatGrid = null;
+const WALK_M_PER_MIN = 80 / 1.3; // straight-line metres per walking minute (80 m/min on streets, 1.3 detour)
+
+async function commuteStops() {
+  const key = `${settings.workLat},${settings.workLon},${settings.arrive}`;
+  if (heatStops && heatStopsKey === key) return heatStops;
+  const when = nextWeekdayISO(settings.arrive);
+  const d = await getJSON(`https://api.transitous.org/api/v1/one-to-all?one=${settings.workLat},${settings.workLon}&time=${encodeURIComponent(when.iso)}&maxTravelTime=90&arriveBy=true`, {}, 60000);
+  const best = new Map();
+  for (const x of d.all || []) {
+    const k = `${x.place.lat.toFixed(4)},${x.place.lon.toFixed(4)}`;
+    if (!best.has(k) || best.get(k).min > x.duration) best.set(k, { lat: x.place.lat, lon: x.place.lon, name: x.place.name, min: x.duration });
+  }
+  heatStops = [...best.values()];
+  heatStopsKey = key;
+  return heatStops;
+}
+function flatDist(lat1, lon1, lat2, lon2) {
+  const kx = 111320 * Math.cos((lat1 * Math.PI) / 180);
+  return Math.hypot((lon2 - lon1) * kx, (lat2 - lat1) * 111320);
+}
+function nearestFlat(list, lat, lon) {
+  let best = null, bd = Infinity;
+  for (const p of list) { const d = flatDist(lat, lon, p.lat, p.lon); if (d < bd) { bd = d; best = p; } }
+  return best ? { p: best, d: bd } : null;
+}
+function heatColor(s) {
+  // red (0) → amber (50) → green (100)
+  const stops = [[0, [194, 65, 45]], [50, [224, 173, 58]], [100, [30, 138, 76]]];
+  let i = 0;
+  while (i < stops.length - 2 && s > stops[i + 1][0]) i++;
+  const [s0, c0] = stops[i], [s1, c1] = stops[i + 1];
+  const t = Math.max(0, Math.min(1, (s - s0) / (s1 - s0)));
+  return `rgb(${c0.map((v, k) => Math.round(v + (c1[k] - v) * t)).join(",")})`;
+}
+async function renderHeat() {
+  heatLayer.clearLayers();
+  heatCells.clear();
+  if (!map.hasLayer(heatLayer)) return;
+  let stops = [];
+  try { stops = await commuteStops(); } catch (e) { toast(`Commute times for heatmap unavailable: ${e.message}`); }
+  const allStops = [...stops, ...poisOf("tram"), ...DATA.stations];
+  const disc = poisOf("discounter"), gym = poisOf("gym"), pharm = poisOf("pharmacy");
+  const stK = DATA.stations.filter((s) => s.direct?.koeln || s.direct?.koeln_deutz);
+  const { s, w, n, e } = HEAT.box;
+  const dLat = HEAT.stepM / 111320, dLon = HEAT.stepM / (111320 * Math.cos((((s + n) / 2) * Math.PI) / 180));
+  const W = settings.weights;
+  heatGrid = { s, w, dLat, dLon };
+  for (let lat = s; lat < n; lat += dLat) {
+    for (let lon = w; lon < e; lon += dLon) {
+      const c = [lat + dLat / 2, lon + dLon / 2];
+      const ns = nearestFlat(allStops, ...c);
+      if (!ns || ns.d > 650) continue; // outside the built-up / served area
+      const mins = {};
+      const nd = nearestFlat(disc, ...c), ng = nearestFlat(gym, ...c), np = nearestFlat(pharm, ...c), nk = nearestFlat(stK, ...c);
+      mins.discounter = nd && nd.d / WALK_M_PER_MIN;
+      mins.gym = ng && ng.d / WALK_M_PER_MIN;
+      mins.pharmacy = np && np.d / WALK_M_PER_MIN;
+      mins.station = nk && nk.d / WALK_M_PER_MIN;
+      let commute = flatDist(...c, settings.workLat, settings.workLon) / WALK_M_PER_MIN, via = null;
+      for (const st of stops) {
+        const dd = flatDist(...c, st.lat, st.lon);
+        if (dd > 1200) continue;
+        const t = dd / WALK_M_PER_MIN + st.min;
+        if (t < commute) { commute = t; via = st.name; }
+      }
+      mins.commute = commute;
+      let sum = 0, ws = 0;
+      for (const [k, wt] of Object.entries(W)) { if (!wt) continue; sum += wt * partScore(mins[k], SCORE_KEYS[k].good, SCORE_KEYS[k].bad); ws += wt; }
+      const score = ws ? Math.round((sum / ws) * 100) : 0;
+      L.rectangle([[lat, lon], [lat + dLat, lon + dLon]], {
+        renderer: heatRenderer, stroke: false, fillColor: heatColor(score), fillOpacity: 0.5, interactive: false,
+      }).addTo(heatLayer);
+      heatCells.set(`${Math.floor((lat - s) / dLat)},${Math.floor((lon - w) / dLon)}`, { score, mins, nd, ng, nk, via });
+    }
+  }
+}
+map.on("click", (ev) => {
+  if (picking || !map.hasLayer(heatLayer) || !heatGrid) return;
+  const g = heatGrid;
+  const cell = heatCells.get(`${Math.floor((ev.latlng.lat - g.s) / g.dLat)},${Math.floor((ev.latlng.lng - g.w) / g.dLon)}`);
+  if (!cell) return;
+  const { score, mins, nd, ng, nk, via } = cell;
+  const f = (m) => (m == null ? "–" : `~${Math.max(1, Math.round(m))} min`);
+  L.popup().setLatLng(ev.latlng).setContent(`<div class="pop"><div class="pop-cat">Area score</div><div class="pop-title">${score} / 100</div>
+    <table>
+    <tr><td>🛒 ${esc(nd?.p.name || "")}</td><td>${f(mins.discounter)}</td></tr>
+    <tr><td>🏋️ ${esc(ng?.p.name || "")}</td><td>${f(mins.gym)}</td></tr>
+    <tr><td>🚆 ${esc(nk?.p.name || "")}</td><td>${f(mins.station)}</td></tr>
+    <tr><td>💼 ${esc(settings.workName)}${via ? ` <span class="muted">via ${esc(via)}</span>` : " (walk)"}</td><td>${f(mins.commute)}</td></tr>
+    </table><div class="small muted">Estimates from straight-line distance. Add an apartment for exact times.</div>
+    <div class="pop-links"><a href="#" data-addhere="${ev.latlng.lat},${ev.latlng.lng}">+ Add apartment here</a></div></div>`).openOn(map);
+});
+map.on("popupopen", (e) => {
+  const a = e.popup.getElement()?.querySelector("[data-addhere]");
+  if (!a) return;
+  a.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    const [lat, lon] = a.dataset.addhere.split(",").map(Number);
+    map.closePopup();
+    let addr = `${lat.toFixed(5)}, ${lon.toFixed(5)}`, label = "Area pick";
+    try {
+      const d = await getJSON(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&lang=de`, {}, 8000);
+      if (d.features?.[0]) { const l = photonLabel(d.features[0]); addr = l.full; label = l.l1 || label; }
+    } catch { /* keep coordinates */ }
+    openAptDialog({ addr, lat, lon, label });
+  });
+});
+function setHeat(on) {
+  if (on) {
+    heatLayer.addTo(map);
+    if (!heatLegend) {
+      heatLegend = L.control({ position: "bottomleft" });
+      heatLegend.onAdd = () => {
+        const d = L.DomUtil.create("div", "heat-legend");
+        d.innerHTML = `<div class="small"><b>Area score</b> (your priorities)</div><div class="bar"></div><div class="row-between small"><span>0</span><span>50</span><span>100</span></div>`;
+        return d;
+      };
+    }
+    heatLegend.addTo(map);
+    renderHeat();
+  } else {
+    map.removeLayer(heatLayer);
+    heatLegend?.remove();
+  }
+  store.set("heatOn", on);
+}
+$("#heat-toggle").addEventListener("change", (e) => setHeat(e.target.checked));
 
 // ---------- data loading ----------
 async function loadData() {
@@ -1164,7 +1302,7 @@ $("#settings-dialog").addEventListener("close", async () => {
   settings = { ...next, updatedAt: Date.now() };
   store.set("settings", settings);
   Sync.schedule();
-  drawWork(); renderApts();
+  drawWork(); renderApts(); renderHeat();
   if (selectedId) selectApt(selectedId);
 });
 
@@ -1185,6 +1323,7 @@ $("#panel-toggle").addEventListener("click", () => {
   buildLayers();
   renderApts();
   initLines();
+  if (store.get("heatOn", false)) { $("#heat-toggle").checked = true; setHeat(true); }
   renderSyncBadge();
   Sync.run();
   if (apts.length) {

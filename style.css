@@ -202,3 +202,6 @@ body.picking #map { cursor: crosshair; }
 .sync-status.err { color: var(--bad); }
 ol.steps { padding-left: 18px; }
 ol.steps li { margin-bottom: 4px; }
+
+.heat-legend { background: var(--panel); color: var(--text); padding: 6px 8px; border-radius: 8px; box-shadow: var(--shadow); width: 170px; }
+.heat-legend .bar { height: 8px; border-radius: 4px; margin: 4px 0 2px; background: linear-gradient(90deg, rgb(194,65,45), rgb(224,173,58), rgb(30,138,76)); }
