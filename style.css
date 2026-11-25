@@ -185,3 +185,20 @@ body.picking #map { cursor: crosshair; }
   .panel-head .sub { display: none; }
   .block { padding: 10px 16px; }
 }
+
+/* transport lines */
+.line-chip { font: inherit; font-size: 12px; font-weight: 700; min-width: 30px; padding: 1px 7px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; }
+.line-chip.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel) inset; }
+.line-group { margin-top: 6px; }
+.line-group summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.line-group .chips { gap: 4px; }
+#line-info { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; margin: 6px 0; }
+#line-info .stops { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.pill.clickable { cursor: pointer; border-color: var(--accent); }
+.stop-label { font-size: 11px; font-weight: 600; background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 0 4px; box-shadow: none; }
+
+.sync-status { margin: 0 0 6px; color: var(--muted); }
+.sync-status.ok::before { content: "☁ "; }
+.sync-status.err { color: var(--bad); }
+ol.steps { padding-left: 18px; }
+ol.steps li { margin-bottom: 4px; }

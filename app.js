@@ -304,6 +304,120 @@ function drawWork() {
   }).addTo(map).bindPopup(`<div class="pop"><div class="pop-cat">Work</div><div class="pop-title">${esc(settings.workName)}</div><div class="small muted">${esc(settings.workAddr)}</div></div>`);
 }
 
+// ---------- transport lines ----------
+map.createPane("lines");
+map.getPane("lines").style.zIndex = 350;
+const lineRenderer = L.canvas({ pane: "lines", tolerance: 6 });
+const lineLayer = L.layerGroup().addTo(map);
+const LINES = { rail: null, bus: null };
+let linesOn = { rail: false, bus: false, ...store.get("linesOn", {}) };
+let activeLine = null;
+const MODE_LABEL = { train: "Train", tram: "Stadtbahn / tram", bus: "Bus" };
+
+async function loadLines(kind) {
+  if (!LINES[kind]) {
+    try { LINES[kind] = (await getJSON(`data/lines_${kind}.json`)).lines; }
+    catch (e) { LINES[kind] = []; toast(`Transport lines not available yet (${e.message}).`); }
+  }
+  return LINES[kind];
+}
+const allLines = () => [...(LINES.rail || []), ...(LINES.bus || [])];
+function textOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return "#fff";
+  const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#111" : "#fff";
+}
+const chipHTML = (l) => `<button type="button" class="line-chip${activeLine === l.id ? " active" : ""}" data-line="${esc(l.id)}"
+  style="background:${esc(l.colour)};color:${textOn(l.colour)}" title="${esc(l.name)}">${esc(l.ref)}</button>`;
+
+function renderLines() {
+  lineLayer.clearLayers();
+  const shown = [];
+  for (const kind of ["rail", "bus"]) if (linesOn[kind] && LINES[kind]) shown.push(...LINES[kind]);
+  const active = allLines().find((l) => l.id === activeLine);
+  if (active && !shown.includes(active)) shown.push(active);
+  for (const l of shown) {
+    const on = l === active;
+    const dim = active && !on;
+    const base = l.mode === "bus" ? 2.5 : 3.5;
+    if (on) L.polyline(l.segs, { renderer: lineRenderer, color: "#fff", weight: base + 7, opacity: 0.9, interactive: false }).addTo(lineLayer);
+    const pl = L.polyline(l.segs, {
+      renderer: lineRenderer, color: l.colour, weight: on ? base + 3 : base, opacity: dim ? 0.12 : on ? 1 : 0.75,
+    }).addTo(lineLayer);
+    pl.on("click", (e) => { L.DomEvent.stopPropagation(e); if (!picking) highlightLine(l.id === activeLine ? null : l.id); });
+    pl.bindTooltip(`${MODE_LABEL[l.mode]} ${esc(l.ref)}`, { sticky: true });
+  }
+  if (active) {
+    for (const [lat, lon, name] of active.stops) {
+      L.circleMarker([lat, lon], { renderer: lineRenderer, radius: 4.5, color: active.colour, weight: 2.5, fillColor: "#fff", fillOpacity: 1 })
+        .bindTooltip(esc(name), { permanent: map.getZoom() >= 14, direction: "right", offset: [6, 0], className: "stop-label" })
+        .addTo(lineLayer);
+    }
+  }
+  renderLineChips();
+}
+map.on("zoomend", () => { if (activeLine) renderLines(); });
+
+function renderLineChips() {
+  const box = $("#line-chips");
+  const groups = [["train", "Trains & S-Bahn"], ["tram", "Stadtbahn / tram"], ["bus", "Buses"]];
+  box.innerHTML = groups.map(([mode, label]) => {
+    const ls = allLines().filter((l) => l.mode === mode && (mode === "bus" ? linesOn.bus : linesOn.rail));
+    if (!ls.length) return "";
+    return `<details class="line-group" ${mode !== "bus" || ls.length < 40 ? "open" : ""}><summary>${label} (${ls.length})</summary><div class="chips">${ls.map(chipHTML).join("")}</div></details>`;
+  }).join("");
+  const info = $("#line-info");
+  const l = allLines().find((x) => x.id === activeLine);
+  info.hidden = !l;
+  if (l) {
+    const variants = (l.variants || [l.name]).map(esc).join("<br>");
+    info.innerHTML = `<div class="row-between"><div>${chipHTML(l)} <b>${MODE_LABEL[l.mode]} ${esc(l.ref)}</b></div>
+      <div class="row gap-s"><button class="btn small ghost" type="button" id="line-zoom">Zoom</button><button class="btn small ghost" type="button" id="line-clear">✕</button></div></div>
+      <div class="small" style="margin-top:4px">${variants}</div>
+      ${l.stops.length ? `<details class="stops"><summary>${l.stops.length} stops</summary>${l.stops.map((s) => esc(s[2])).join(" · ")}</details>` : ""}
+      <div class="small" style="margin-top:4px"><a href="https://www.openstreetmap.org/relation/${l.osm[0]}" target="_blank" rel="noopener">OSM</a></div>`;
+    $("#line-zoom").onclick = () => zoomToLine(l);
+    $("#line-clear").onclick = () => highlightLine(null);
+  }
+}
+$("#lines-block").addEventListener("click", (e) => {
+  const id = e.target.closest(".line-chip")?.dataset.line;
+  if (id && !e.target.closest("#line-info")) highlightLine(id === activeLine ? null : id, true);
+});
+function zoomToLine(l) {
+  map.fitBounds(L.latLngBounds(l.segs.flat()).pad(0.05), { maxZoom: 15 });
+}
+function highlightLine(id, zoom = false) {
+  activeLine = id;
+  renderLines();
+  const l = allLines().find((x) => x.id === id);
+  if (l && zoom) zoomToLine(l);
+  if (l && matchMedia("(max-width: 760px)").matches) $("#line-info").scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+// Highlight a line by its public name, e.g. from a journey leg ("611", "RB30", "16").
+async function highlightByRef(ref, mode) {
+  await Promise.all([loadLines("rail"), loadLines("bus")]);
+  const norm = (s) => String(s).replace(/\s+/g, "").toUpperCase();
+  const want = mode === "BUS" ? ["bus"] : /TRAM|SUBWAY|METRO/.test(mode) ? ["tram"] : /RAIL|SUBURBAN|TRAIN|DISTANCE/.test(mode) ? ["train"] : ["train", "tram", "bus"];
+  const hit = allLines().find((l) => norm(l.ref) === norm(ref) && want.includes(l.mode)) || allLines().find((l) => norm(l.ref) === norm(ref));
+  if (hit) highlightLine(hit.id, true); else toast(`Line ${ref} not found in map data.`);
+}
+for (const kind of ["rail", "bus"]) {
+  const cb = $(`#lines-${kind}`);
+  cb.checked = linesOn[kind];
+  cb.addEventListener("change", async () => {
+    linesOn = { ...linesOn, [kind]: cb.checked };
+    store.set("linesOn", linesOn);
+    if (cb.checked) await loadLines(kind);
+    renderLines();
+  });
+}
+async function initLines() {
+  for (const kind of ["rail", "bus"]) if (linesOn[kind]) await loadLines(kind);
+  renderLines();
+}
+
 // ---------- data loading ----------
 async function loadData() {
   const [stations, prices] = await Promise.all([
@@ -494,9 +608,9 @@ $("#apt-dialog").addEventListener("close", () => {
   for (const k of ["label", "rent", "size", "rooms", "available", "url", "notes"]) vals[k] = f.elements[k].value.trim();
   for (const k of ["rent", "size", "rooms"]) vals[k] = vals[k] === "" ? null : Number(vals[k]);
   if (editing.id) {
-    Object.assign(apts.find((a) => a.id === editing.id), vals);
+    Object.assign(apts.find((a) => a.id === editing.id), vals, { updatedAt: Date.now() });
   } else {
-    const a = { id: Math.random().toString(36).slice(2, 10), addr: editing.addr, lat: editing.lat, lon: editing.lon, ...vals };
+    const a = { id: Math.random().toString(36).slice(2, 10), addr: editing.addr, lat: editing.lat, lon: editing.lon, ...vals, createdAt: Date.now(), updatedAt: Date.now() };
     apts.push(a);
     selectedId = a.id;
   }
@@ -507,12 +621,16 @@ $("#apt-dialog").addEventListener("close", () => {
 $("#apt-delete").addEventListener("click", () => {
   if (!editing?.id || !confirm(`Delete “${editing.label}”?`)) return;
   apts = apts.filter((a) => a.id !== editing.id);
+  tombstone(editing.id);
   if (selectedId === editing.id) { selectedId = null; $("#detail").hidden = true; isoLayer.clearLayers(); highlightLayer.clearLayers(); }
   editing = null;
   $("#apt-dialog").close("deleted");
   saveApts(); renderApts();
 });
-function saveApts() { store.set("apartments", apts); }
+function saveApts(changed = true) {
+  store.set("apartments", apts);
+  if (changed) Sync.schedule();
+}
 
 // ---------- analysis ----------
 function analysisKey() {
@@ -672,7 +790,7 @@ async function selectApt(id, opts = {}) {
     renderDetail(a, true);
     try {
       a.analysis = await analyze(a);
-      saveApts();
+      saveApts(false);
     } catch (e) {
       console.error(e);
       toast(`Analysis failed: ${e.message}`);
@@ -696,7 +814,7 @@ async function analyzeRest() {
   try {
     for (const a of apts) {
       if (a.analysis?.key === analysisKey()) continue;
-      try { a.analysis = await analyze(a); saveApts(); renderApts(); } catch (e) { console.warn("background analysis", e); }
+      try { a.analysis = await analyze(a); saveApts(false); renderApts(); } catch (e) { console.warn("background analysis", e); }
     }
   } finally { restRunning = false; }
 }
@@ -772,7 +890,7 @@ function renderDetail(a, loading) {
   const c = an.commute || {};
   const t = c.transit;
   if (t) {
-    const legs = t.legs.filter((l) => l.mode !== "WALK").map((l) => `<span class="pill">${esc(l.line || l.mode)}</span> ${esc(l.from)} → ${esc(l.to)}`).join("<br>");
+    const legs = t.legs.filter((l) => l.mode !== "WALK").map((l) => `<span class="pill clickable" data-ref="${esc(l.line)}" data-mode="${esc(l.mode)}" title="Show this line on the map">${esc(l.line || l.mode)}</span> ${esc(l.from)} → ${esc(l.to)}`).join("<br>");
     f.push(fact("💼", `To ${esc(settings.workName)} (public transport)`, fmtMin(t.sec), grade(t.sec / 60, 15, 50),
       `Leave ${t.dep}, arrive ${t.arr} · ${t.transfers} transfer${t.transfers === 1 ? "" : "s"}${legs ? "<br>" + legs : " · walking only"}`));
   }
@@ -795,6 +913,7 @@ function renderDetail(a, loading) {
     </div>
     <p class="small muted">Commute for ${esc(c.date || "")} (Tue), arriving by ${esc(settings.arrive)}.</p>`;
   $("#edit-apt").onclick = () => openAptDialog(a);
+  el.querySelectorAll(".pill.clickable").forEach((p) => { p.onclick = () => highlightByRef(p.dataset.ref, p.dataset.mode); });
   $("#reanalyze").onclick = () => { a.analysis = null; selectApt(a.id); };
 }
 
@@ -831,6 +950,159 @@ $("#compare-btn").addEventListener("click", () => {
   $("#compare-dialog").showModal();
 });
 
+// ---------- sync between devices (secret GitHub Gist) ----------
+function tombstone(id) {
+  const t = store.get("deletedApts", {});
+  t[id] = Date.now();
+  store.set("deletedApts", t);
+}
+const Sync = {
+  api: "https://api.github.com",
+  file: "bonn-apartments.json",
+  desc: "Bonn Apartment Map – synced apartments (private)",
+  timer: null, busy: false, again: false,
+  get token() { return store.get("syncToken", null); },
+  get gistId() { return store.get("syncGistId", null); },
+  status(msg, cls = "") {
+    const el = $("#sync-status");
+    if (el) { el.textContent = msg; el.className = `small sync-status ${cls}`; }
+    const d = $("#sync-dialog-status");
+    if (d) d.textContent = msg;
+  },
+  async gh(path, opts = {}) {
+    const r = await fetch(this.api + path, {
+      ...opts,
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${this.token}`, "X-GitHub-Api-Version": "2022-11-28", ...(opts.body ? { "Content-Type": "application/json" } : {}) },
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? "token invalid or expired" : r.status === 404 ? "gist not found (check the token has the 'gist' scope)" : `GitHub ${r.status}`);
+    return r.status === 204 ? null : r.json();
+  },
+  async connect(token) {
+    store.set("syncToken", token.trim());
+    store.set("syncGistId", null);
+    // Reuse an existing gist made by this app (e.g. on another device).
+    for (let page = 1; page <= 5; page++) {
+      const list = await this.gh(`/gists?per_page=100&page=${page}`);
+      const hit = list.find((g) => g.description === this.desc && g.files[this.file]);
+      if (hit) { store.set("syncGistId", hit.id); break; }
+      if (list.length < 100) break;
+    }
+    if (!this.gistId) {
+      const g = await this.gh("/gists", { method: "POST", body: JSON.stringify({ description: this.desc, public: false, files: { [this.file]: { content: JSON.stringify(this.local()) } } }) });
+      store.set("syncGistId", g.id);
+    }
+    await this.run();
+  },
+  disconnect() {
+    store.set("syncToken", null);
+    store.set("syncGistId", null);
+    this.status("");
+    renderSyncBadge();
+  },
+  local() {
+    return {
+      v: 1,
+      apartments: apts.map(({ analysis, ...a }) => a),
+      deleted: store.get("deletedApts", {}),
+      settings,
+    };
+  },
+  merge(remote) {
+    const deleted = { ...(remote.deleted || {}) };
+    for (const [id, t] of Object.entries(store.get("deletedApts", {}))) deleted[id] = Math.max(deleted[id] || 0, t);
+    const byId = new Map();
+    for (const a of [...(remote.apartments || []), ...apts]) {
+      const cur = byId.get(a.id);
+      if (!cur || (a.updatedAt || 0) > (cur.updatedAt || 0)) byId.set(a.id, a);
+    }
+    const localById = new Map(apts.map((a) => [a.id, a]));
+    const merged = [];
+    for (const a of byId.values()) {
+      if (deleted[a.id] && deleted[a.id] >= (a.updatedAt || 0)) continue;
+      const loc = localById.get(a.id);
+      // keep the locally cached analysis if the location did not change
+      merged.push(loc && loc.lat === a.lat && loc.lon === a.lon && loc.analysis ? { ...a, analysis: loc.analysis } : { ...a });
+    }
+    // order: by first creation on any device (stable list numbers everywhere)
+    const order = new Map([...(remote.apartments || []), ...apts].map((a, i) => [a.id, i]));
+    merged.sort((x, y) => (x.createdAt || 0) - (y.createdAt || 0) || order.get(x.id) - order.get(y.id));
+    const rs = remote.settings;
+    const mergedSettings = rs && (rs.updatedAt || 0) > (settings.updatedAt || 0) ? { ...settings, ...rs } : settings;
+    return { apartments: merged, deleted, settings: mergedSettings };
+  },
+  schedule() {
+    if (!this.token) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.run(), 1500);
+  },
+  async run() {
+    if (!this.token || !this.gistId) return;
+    if (this.busy) { this.again = true; return; }
+    this.busy = true;
+    this.status("Syncing…");
+    try {
+      const g = await this.gh(`/gists/${this.gistId}`);
+      const f = g.files[this.file];
+      let remote = {};
+      if (f) {
+        const text = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+        try { remote = JSON.parse(text || "{}"); } catch { remote = {}; }
+      }
+      const m = this.merge(remote);
+      const settingsChanged = JSON.stringify(m.settings) !== JSON.stringify(settings);
+      apts = m.apartments;
+      store.set("deletedApts", m.deleted);
+      settings = m.settings;
+      store.set("settings", settings);
+      store.set("apartments", apts);
+      const out = this.local();
+      if (JSON.stringify(out) !== JSON.stringify({ v: 1, apartments: remote.apartments, deleted: remote.deleted, settings: remote.settings })) {
+        await this.gh(`/gists/${this.gistId}`, { method: "PATCH", body: JSON.stringify({ files: { [this.file]: { content: JSON.stringify(out) } } }) });
+      }
+      if (settingsChanged) drawWork();
+      if (selectedId && !apts.some((a) => a.id === selectedId)) { selectedId = null; $("#detail").hidden = true; isoLayer.clearLayers(); highlightLayer.clearLayers(); }
+      renderApts();
+      analyzeRest();
+      this.status(`Synced ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`, "ok");
+    } catch (e) {
+      console.warn("sync", e);
+      this.status(`Sync failed: ${e.message}`, "err");
+    } finally {
+      this.busy = false;
+      if (this.again) { this.again = false; this.run(); }
+    }
+  },
+};
+function renderSyncBadge() {
+  const el = $("#sync-status");
+  if (el) el.hidden = !Sync.token;
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") Sync.run(); });
+
+function openSyncDialog() {
+  const on = !!Sync.token;
+  $("#sync-connected").hidden = !on;
+  $("#sync-setup").hidden = on;
+  $("#sync-token").value = "";
+  $("#sync-dialog").showModal();
+}
+$("#sync-connect").addEventListener("click", async () => {
+  const t = $("#sync-token").value.trim();
+  if (!t) return;
+  $("#sync-dialog-status").textContent = "Connecting…";
+  try {
+    await Sync.connect(t);
+    renderSyncBadge();
+    $("#sync-dialog").close();
+    toast("Sync is on. Connect your other devices with the same token.");
+  } catch (e) {
+    store.set("syncToken", null);
+    $("#sync-dialog-status").textContent = `Could not connect: ${e.message}`;
+  }
+});
+$("#sync-now").addEventListener("click", () => Sync.run());
+$("#sync-off").addEventListener("click", () => { Sync.disconnect(); $("#sync-dialog").close(); toast("Sync turned off on this device. Your apartments stay here."); });
+
 // ---------- menu: export / import / settings ----------
 $("#menu-btn").addEventListener("click", () => { $("#menu").hidden = !$("#menu").hidden; });
 $("#menu").addEventListener("click", (e) => {
@@ -845,6 +1117,7 @@ $("#menu").addEventListener("click", (e) => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } else if (act === "import") $("#import-file").click();
   else if (act === "settings") openSettings();
+  else if (act === "sync") openSyncDialog();
 });
 $("#import-file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -855,10 +1128,10 @@ $("#import-file").addEventListener("change", async (e) => {
     let added = 0;
     for (const a of incoming) {
       if (apts.some((x) => x.id === a.id || (Math.abs(x.lat - a.lat) < 1e-5 && Math.abs(x.lon - a.lon) < 1e-5))) continue;
-      apts.push({ ...a, id: a.id || Math.random().toString(36).slice(2, 10) });
+      apts.push({ ...a, id: a.id || Math.random().toString(36).slice(2, 10), updatedAt: Date.now() });
       added++;
     }
-    if (d.settings && confirm("Also import settings (work place, priorities)?")) { settings = { ...settings, ...d.settings }; store.set("settings", settings); drawWork(); }
+    if (d.settings && confirm("Also import settings (work place, priorities)?")) { settings = { ...settings, ...d.settings, updatedAt: Date.now() }; store.set("settings", settings); Sync.schedule(); drawWork(); }
     saveApts(); renderApts();
     toast(`Imported ${added} apartment${added === 1 ? "" : "s"}.`);
   } catch (err) { toast(`Import failed: ${err.message}`); }
@@ -888,8 +1161,9 @@ $("#settings-dialog").addEventListener("close", async () => {
       next.workAddr = addr;
     } catch (e) { toast(`Could not find work address: ${e.message}`); return; }
   }
-  settings = next;
+  settings = { ...next, updatedAt: Date.now() };
   store.set("settings", settings);
+  Sync.schedule();
   drawWork(); renderApts();
   if (selectedId) selectApt(selectedId);
 });
@@ -910,6 +1184,9 @@ $("#panel-toggle").addEventListener("click", () => {
   try { await loadData(); } catch (e) { console.error(e); toast(`Data load failed: ${e.message}`); }
   buildLayers();
   renderApts();
+  initLines();
+  renderSyncBadge();
+  Sync.run();
   if (apts.length) {
     const b = L.latLngBounds(apts.map((a) => [a.lat, a.lon])).extend([settings.workLat, settings.workLon]);
     map.fitBounds(b.pad(0.3), { maxZoom: 15 });

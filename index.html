@@ -38,9 +38,11 @@
         <div id="menu" class="menu" hidden>
           <button type="button" data-action="export">Export apartments (JSON)</button>
           <button type="button" data-action="import">Import apartments…</button>
+          <button type="button" data-action="sync">Sync between devices…</button>
           <button type="button" data-action="settings">Settings (work place, arrival time)</button>
           <input id="import-file" type="file" accept="application/json" hidden>
         </div>
+        <p id="sync-status" class="small sync-status" hidden></p>
         <p id="no-apts" class="muted small">No apartments yet. Search an address above.</p>
         <ul id="apt-list" class="apt-list"></ul>
       </section>
@@ -51,6 +53,15 @@
         <h2>Map layers</h2>
         <div id="layers" class="layers"></div>
         <label class="check iso-toggle"><input type="checkbox" id="iso-toggle" checked> Walking areas (5 / 10 / 15 min)</label>
+      </section>
+
+      <section class="block" id="lines-block">
+        <h2>Transport lines</h2>
+        <label class="check"><input type="checkbox" id="lines-rail"> 🚆 Trains, S-Bahn &amp; Stadtbahn</label>
+        <label class="check"><input type="checkbox" id="lines-bus"> 🚌 Buses</label>
+        <p class="muted small" style="margin:6px 0 4px">Tap a line on the map or below to highlight it with its stops.</p>
+        <div id="line-info" hidden></div>
+        <div id="line-chips"></div>
       </section>
 
       <footer class="block foot small muted" id="data-info"></footer>
@@ -98,6 +109,25 @@
         <button value="save" class="btn primary">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="sync-dialog">
+    <h3>Sync between devices</h3>
+    <div id="sync-setup">
+      <p class="small">Your apartments are stored in a <b>secret GitHub Gist</b> in your own account, so laptop and phone show the same list.</p>
+      <ol class="small steps">
+        <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Bonn%20Apartment%20Map" target="_blank" rel="noopener">Create a GitHub token</a> with only the <b>gist</b> box ticked (choose an expiry, e.g. 90 days), then copy it.</li>
+        <li>Paste it below and press Connect. Do the same on your other devices with the same token.</li>
+      </ol>
+      <label>GitHub token <input id="sync-token" type="password" autocomplete="off" placeholder="ghp_…"></label>
+      <p class="small muted">The token is saved only in this browser and can only read/write your gists. You can revoke it any time on GitHub.</p>
+      <div class="row-end gap-s"><form method="dialog"><button class="btn ghost">Cancel</button></form><button class="btn primary" id="sync-connect" type="button">Connect</button></div>
+    </div>
+    <div id="sync-connected" hidden>
+      <p class="small">Sync is on. Changes are saved to your secret gist automatically and picked up when you open the map on another device.</p>
+      <div class="row-end gap-s"><button class="btn ghost danger" id="sync-off" type="button">Turn off</button><button class="btn" id="sync-now" type="button">Sync now</button><form method="dialog"><button class="btn primary">Done</button></form></div>
+    </div>
+    <p id="sync-dialog-status" class="small muted"></p>
   </dialog>
 
   <dialog id="compare-dialog" class="wide">
