@@ -140,6 +140,8 @@ function poiPopup(cat, p) {
   let h = `<div class="pop"><div class="pop-cat">${c.icon} ${esc(c.one)}</div><div class="pop-title">${esc(p.name)}</div>`;
   if (p.address) h += `<div class="small muted">${esc(p.address)}</div>`;
   if (p.hours) h += `<div class="small">🕑 ${esc(p.hours)}</div>`;
+  if (p.studio) h += `<div class="small"><span class="pill">Studio / specialised</span></div>`;
+  if (p.women) h += `<div class="small"><span class="pill">Women only</span></div>`;
   if (p.price) {
     const pr = p.price;
     h += `<div class="pop-price"><b>${eur(pr.monthly_eur)}/month</b>`;
@@ -170,44 +172,118 @@ function poiPopup(cat, p) {
   return h + "</div>";
 }
 
+// ---------- filters (gyms, discounter chains) ----------
+const CHAINS = ["aldi", "lidl", "penny", "netto", "norma"];
+const STUDIO_RX = /yoga|pilates|personal|boxing|box\b|thai|kick|reha|rücken|physio|tanz|dance|\bems\b|ems-|körperformen|crossfit|mbsr|kampf|judo|karate|stunt|namalia|miriya|butterfly|kopfk|visio-?life/i;
+const WOMEN_RX = /frauen|ladies|donna|women|lady/i;
+let filters = { gymStudios: false, gymPricedOnly: false, gymMaxPrice: null, chains: Object.fromEntries(CHAINS.map((c) => [c, true])), ...store.get("filters", {}) };
+function chainOf(p) {
+  const m = `${p.brand || ""} ${p.name}`.toLowerCase().match(/aldi|lidl|penny|netto|norma/);
+  return m ? m[0] : null;
+}
+function passes(cat, p) {
+  if (cat === "gym") {
+    if (!filters.gymStudios && p.studio) return false;
+    if (filters.gymPricedOnly && !p.price) return false;
+    if (filters.gymMaxPrice && (!p.price || p.price.monthly_eur > filters.gymMaxPrice)) return false;
+  }
+  if (cat === "discounter") {
+    const c = chainOf(p);
+    if (c && !filters.chains[c]) return false;
+  }
+  return true;
+}
+function poisOf(cat) {
+  const list = cat === "station" ? DATA.stations : DATA.pois[cat] || [];
+  return list.filter((p) => passes(cat, p));
+}
+function filtersKey() { return JSON.stringify([filters.gymStudios, filters.gymPricedOnly, filters.gymMaxPrice, CHAINS.filter((c) => filters.chains[c])]); }
+function setFilters(patch) {
+  filters = { ...filters, ...patch };
+  store.set("filters", filters);
+  for (const cat of ["gym", "discounter"]) rebuildMarkers(cat);
+  renderApts();
+  if (selectedId) selectApt(selectedId, { keepView: true }); else analyzeRest();
+}
+
+function rebuildMarkers(cat) {
+  const c = CATS[cat];
+  const g = layers[cat] || (layers[cat] = L.layerGroup());
+  g.clearLayers();
+  const list = poisOf(cat);
+  for (const p of list) {
+    let m;
+    if (cat === "station") {
+      const major = p.direct && (p.direct.koeln || p.direct.koeln_deutz);
+      m = L.circleMarker([p.lat, p.lon], {
+        radius: major ? 9 : 6, color: "#fff", weight: 2, fillColor: cssVar(c.color), fillOpacity: major ? 1 : 0.6,
+      });
+      m.bindTooltip(p.name, { permanent: true, direction: "right", offset: [8, 0], className: "station-label" });
+    } else {
+      m = L.circleMarker([p.lat, p.lon], {
+        radius: cat === "tram" ? 4 : 6, color: "#fff", weight: 1.5, fillColor: cssVar(c.color), fillOpacity: 0.95,
+      });
+      m.bindTooltip(esc(p.name), { direction: "top", offset: [0, -6] });
+    }
+    m.bindPopup(() => poiPopup(cat, p), { maxWidth: 320 });
+    g.addLayer(m);
+  }
+  const cnt = document.querySelector(`.check[data-cat="${cat}"] .count`);
+  if (cnt) cnt.textContent = list.length;
+  if (cat === "station") updateStationLabels();
+}
+
+function filterControls(cat) {
+  const div = document.createElement("div");
+  div.className = "subfilters";
+  if (cat === "gym") {
+    div.innerHTML = `
+      <label class="check small"><input type="checkbox" data-f="gymStudios" ${filters.gymStudios ? "checked" : ""}> Include studios (yoga, EMS, boxing, personal training, rehab)</label>
+      <label class="check small"><input type="checkbox" data-f="gymPricedOnly" ${filters.gymPricedOnly ? "checked" : ""}> Only gyms with a known price</label>
+      <label class="check small">Max. price <input type="number" min="0" step="5" class="tiny" data-f="gymMaxPrice" value="${filters.gymMaxPrice ?? ""}" placeholder="any"> €/month</label>`;
+    div.addEventListener("change", (e) => {
+      const f = e.target.dataset.f;
+      if (!f) return;
+      if (f === "gymMaxPrice") setFilters({ gymMaxPrice: e.target.value ? Number(e.target.value) : null });
+      else setFilters({ [f]: e.target.checked });
+    });
+  } else if (cat === "discounter") {
+    div.innerHTML = `<div class="chips">${CHAINS.map((ch) =>
+      `<button type="button" class="chip${filters.chains[ch] ? " on" : ""}" data-chain="${ch}">${ch[0].toUpperCase() + ch.slice(1)}</button>`).join("")}</div>`;
+    div.addEventListener("click", (e) => {
+      const ch = e.target.dataset.chain;
+      if (!ch) return;
+      const next = { ...filters.chains, [ch]: !filters.chains[ch] };
+      if (!CHAINS.some((x) => next[x])) { toast("Keep at least one chain selected."); return; }
+      e.target.classList.toggle("on", next[ch]);
+      setFilters({ chains: next });
+    });
+  }
+  return div;
+}
+
 function buildLayers() {
   const box = $("#layers");
   box.innerHTML = "";
   const savedOn = store.get("layersOn", null);
   for (const [cat, c] of Object.entries(CATS)) {
-    const list = cat === "station" ? DATA.stations : DATA.pois[cat] || [];
-    const g = L.layerGroup();
-    for (const p of list) {
-      let m;
-      if (cat === "station") {
-        const major = p.direct && (p.direct.koeln || p.direct.koeln_deutz);
-        m = L.circleMarker([p.lat, p.lon], {
-          radius: major ? 9 : 6, color: "#fff", weight: 2, fillColor: cssVar(c.color), fillOpacity: major ? 1 : 0.6,
-        });
-        m.bindTooltip(p.name, { permanent: true, direction: "right", offset: [8, 0], className: "station-label" });
-      } else {
-        m = L.circleMarker([p.lat, p.lon], {
-          radius: cat === "tram" ? 4 : 6, color: "#fff", weight: 1.5, fillColor: cssVar(c.color), fillOpacity: 0.95,
-        });
-        m.bindTooltip(esc(p.name), { direction: "top", offset: [0, -6] });
-      }
-      m.bindPopup(() => poiPopup(cat, p), { maxWidth: 320 });
-      g.addLayer(m);
-    }
-    layers[cat] = g;
-    const on = savedOn ? !!savedOn[cat] : c.on;
+    rebuildMarkers(cat);
+    const g = layers[cat];
+    const on = savedOn && cat in savedOn ? !!savedOn[cat] : c.on;
     if (on) g.addTo(map);
     const lab = document.createElement("label");
     lab.className = "check";
+    lab.dataset.cat = cat;
     lab.innerHTML = `<input type="checkbox" ${on ? "checked" : ""}><span class="dot" style="background:${cssVar(c.color)}"></span>
-      <span>${c.icon} ${esc(c.label)}${c.sub ? ` <span class="muted small">${esc(c.sub)}</span>` : ""}</span><span class="count">${list.length}</span>`;
+      <span>${c.icon} ${esc(c.label)}${c.sub ? ` <span class="muted small">${esc(c.sub)}</span>` : ""}</span><span class="count">${poisOf(cat).length}</span>`;
     lab.querySelector("input").addEventListener("change", (e) => {
       e.target.checked ? g.addTo(map) : map.removeLayer(g);
-      const state = {};
+      const state = store.get("layersOn", {}) || {};
       for (const k of Object.keys(CATS)) state[k] = map.hasLayer(layers[k]);
       store.set("layersOn", state);
     });
     box.appendChild(lab);
+    if (cat === "gym" || cat === "discounter") box.appendChild(filterControls(cat));
   }
   updateStationLabels();
 }
@@ -243,6 +319,8 @@ async function loadData() {
   DATA.pois = pois ? pois.categories : {};
   for (const g of DATA.pois.gym || []) {
     const label = `${g.brand || ""} ${g.name}`;
+    g.studio = STUDIO_RX.test(`${label} ${g.website || ""}`);
+    g.women = WOMEN_RX.test(label);
     const hit = DATA.gymPrices.find((c) => c.rx.test(label));
     if (hit) {
       g.chain = hit.chain;
@@ -438,7 +516,7 @@ function saveApts() { store.set("apartments", apts); }
 
 // ---------- analysis ----------
 function analysisKey() {
-  return [CFG.analysisVersion, DATA.poisMeta?.generated, DATA.stationsMeta?.generated, settings.workLat, settings.workLon, settings.arrive].join("|");
+  return [CFG.analysisVersion, filtersKey(), DATA.poisMeta?.generated, DATA.stationsMeta?.generated, settings.workLat, settings.workLon, settings.arrive].join("|");
 }
 function nearestByAir(list, lat, lon, n, filter = () => true) {
   return list.filter(filter).map((p) => ({ p, d: haversine(lat, lon, p.lat, p.lon) })).sort((a, b) => a.d - b.d).slice(0, n);
@@ -468,7 +546,7 @@ async function analyze(apt) {
     res.iso = iso.features.map((f) => ({ min: f.properties.contour, geometry: f.geometry }));
     const c10 = res.iso.find((f) => f.min === 10), c15 = res.iso.find((f) => f.min === 15);
     for (const cat of ["discounter", "supermarket", "gym", "pharmacy"]) {
-      const list = DATA.pois[cat] || [];
+      const list = poisOf(cat);
       res.within[cat] = {
         10: c10 ? list.filter((p) => inGeom(p.lon, p.lat, c10.geometry)).length : null,
         15: c15 ? list.filter((p) => inGeom(p.lon, p.lat, c15.geometry)).length : null,
@@ -479,11 +557,11 @@ async function analyze(apt) {
   // 2) real walking times to the nearest candidates (by air) of each category
   const groups = [];
   for (const cat of ["discounter", "gym", "supermarket", "pharmacy"]) {
-    groups.push({ key: cat, cat, cands: nearestByAir(DATA.pois[cat] || [], lat, lon, 5) });
+    groups.push({ key: cat, cat, cands: nearestByAir(poisOf(cat), lat, lon, 5) });
   }
   groups.push({ key: "stationKoeln", cat: "station", cands: nearestByAir(DATA.stations, lat, lon, 4, (s) => s.direct?.koeln || s.direct?.koeln_deutz) });
   groups.push({ key: "stationDdf", cat: "station", cands: nearestByAir(DATA.stations, lat, lon, 3, (s) => s.direct?.duesseldorf) });
-  groups.push({ key: "tram", cat: "tram", cands: nearestByAir(DATA.pois.tram || [], lat, lon, 4) });
+  groups.push({ key: "tram", cat: "tram", cands: nearestByAir(poisOf("tram"), lat, lon, 4) });
   const targets = [];
   for (const g of groups) for (const c of g.cands) { c.ti = targets.length; targets.push({ lat: c.p.lat, lon: c.p.lon }); }
   let times = null;
@@ -582,14 +660,14 @@ function renderApts() {
   });
 }
 
-async function selectApt(id) {
+async function selectApt(id, opts = {}) {
   selectedId = id;
   const a = apts.find((x) => x.id === id);
   if (!a) return;
   renderApts();
   const panel = $("#panel");
   if (panel.classList.contains("collapsed")) panel.classList.remove("collapsed");
-  if (!map.getBounds().pad(-0.1).contains([a.lat, a.lon])) map.setView([a.lat, a.lon], Math.max(map.getZoom(), 14));
+  if (!opts.keepView && !map.getBounds().pad(-0.1).contains([a.lat, a.lon])) map.setView([a.lat, a.lon], Math.max(map.getZoom(), 14));
   if (a.analysis?.key !== analysisKey()) {
     renderDetail(a, true);
     try {
@@ -605,8 +683,8 @@ async function selectApt(id) {
   renderDetail(a, false);
   drawAnalysis(a);
   const outer = a.analysis?.iso?.find((f) => f.min === 15);
-  if (outer) map.fitBounds(L.geoJSON(outer.geometry).getBounds().pad(0.15), { maxZoom: 16 });
-  if (matchMedia("(max-width: 760px)").matches) $("#detail").scrollIntoView({ block: "start", behavior: "smooth" });
+  if (outer && !opts.keepView) map.fitBounds(L.geoJSON(outer.geometry).getBounds().pad(0.15), { maxZoom: 16 });
+  if (!opts.keepView && matchMedia("(max-width: 760px)").matches) $("#detail").scrollIntoView({ block: "start", behavior: "smooth" });
   analyzeRest();
 }
 

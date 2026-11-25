@@ -132,6 +132,12 @@ a { color: var(--accent); }
 .check .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; border: 2px solid rgba(255,255,255,.8); box-shadow: 0 0 0 1px rgba(0,0,0,.2); }
 .check .count { margin-left: auto; color: var(--muted); font-size: 12px; }
 .iso-toggle { margin-top: 8px; }
+.subfilters { margin: 0 0 6px 20px; padding-left: 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.subfilters .check { font-size: 12px; color: var(--muted); }
+input.tiny { width: 64px; padding: 2px 6px; margin: 0 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: inherit; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; }
+.chip.on { background: var(--c-discounter); border-color: var(--c-discounter); color: #fff; }
 .foot p { margin: 4px 0; }
 .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
