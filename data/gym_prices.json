@@ -90,6 +90,25 @@
    "note": "'from' price per comparison portal",
    "source": "https://www.fitradar.de/en/bonn",
    "checked": "2026-11"
+  },
+  {
+   "chain": "BE FIT",
+   "match": "be ?fit\\b(?! ?quality)",
+   "monthly_eur": 29.95,
+   "min_term_months": 12,
+   "website": "https://www.befit-lifestyle.com",
+   "note": "24-month plan 24.95 € only for the first 2 months, then 49.90 €; plus 15 € service fee every 3 months",
+   "source": "https://fragfitty.de/gym/be-fit-bonn",
+   "checked": "2026-11"
+  },
+  {
+   "chain": "Sportfabrik",
+   "match": "sportfabrik",
+   "monthly_eur": 40.0,
+   "website": "https://www.sportfabrik.de",
+   "note": "40–80 €/month depending on plan (Youth, Mittag, Premium)",
+   "source": "https://fragfitty.de/gym/sportfabrik-bonn",
+   "checked": "2026-11"
   }
  ]
 }

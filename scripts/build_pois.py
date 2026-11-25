@@ -39,6 +39,10 @@ QUERY = f"""
   node["railway"="tram_stop"];
   node["railway"="station"]["station"~"^(light_rail|subway)$"];
   node["railway"="halt"]["station"~"^(light_rail|subway)$"];
+  nwr["shop"~"^(bakery|kiosk)$"];
+  nwr["amenity"~"^(doctors|parcel_locker|post_office)$"];
+  nwr["healthcare"="doctor"];
+  way["leisure"="park"]["name"];
 );
 out center tags;
 """
@@ -46,17 +50,51 @@ DISCOUNTERS = re.compile(r"\b(aldi|lidl|penny|netto|norma)\b", re.I)
 UA = "BonnAptSearch/1.0 (personal apartment-search map; github.com/mmivsek/bonnaptsearch)"
 
 
-def wanted(t, is_node):
-    """Same selection as QUERY, for elements read from a .pbf file."""
-    if t.get("shop") in ("supermarket", "discount"):
-        return True
-    if t.get("leisure") == "fitness_centre" or t.get("amenity") in ("gym", "pharmacy"):
-        return True
-    if t.get("leisure") == "sports_centre" and "fitness" in t.get("sport", ""):
-        return True
+GP = re.compile(r"allgemein|hausarzt|praktische|general|family", re.I)
+
+
+def category(t, is_node=True):
+    """Map OSM tags to an app category, or None if not wanted.
+    Used for both the .pbf reader and the Overpass results."""
+    shop, amenity, leisure = t.get("shop"), t.get("amenity"), t.get("leisure")
+    if shop in ("supermarket", "discount"):
+        label = " ".join(filter(None, (t.get("brand"), t.get("name"))))
+        return "discounter" if DISCOUNTERS.search(label) or shop == "discount" else "supermarket"
+    if amenity == "pharmacy":
+        return "pharmacy"
+    if leisure == "fitness_centre" or amenity == "gym" or (leisure == "sports_centre" and "fitness" in t.get("sport", "")):
+        return "gym"
     if is_node and (t.get("railway") == "tram_stop" or
                     (t.get("railway") in ("station", "halt") and t.get("station") in ("light_rail", "subway"))):
+        return "tram"
+    if shop == "bakery":
+        return "bakery"
+    if shop == "kiosk":
+        return "kiosk"
+    if amenity in ("parcel_locker", "post_office"):
+        return "parcel"
+    if amenity == "doctors" or t.get("healthcare") == "doctor":
+        spec = " ".join(filter(None, (t.get("healthcare:speciality"), t.get("name"), t.get("description"))))
+        return "doctor" if GP.search(spec) else None
+    if leisure == "park" and t.get("name") and not is_node:
+        return "park"
+    return None
+
+
+def wanted(t, is_node):
+    return category(t, is_node) is not None
+
+
+def late_open(hours):
+    """True if opening_hours suggests the place is open until 22:00 or later."""
+    if not hours:
+        return False
+    if "24/7" in hours:
         return True
+    for m in re.finditer(r"-\s*(\d{1,2}):(\d{2})", hours):
+        h = int(m.group(1))
+        if h >= 22 or h <= 3:
+            return True
     return False
 
 
@@ -115,17 +153,6 @@ def address(t):
     return ", ".join(x for x in (street, city) if x) or None
 
 
-def category(t):
-    if t.get("shop") in ("supermarket", "discount"):
-        label = " ".join(filter(None, (t.get("brand"), t.get("name"))))
-        return "discounter" if DISCOUNTERS.search(label) or t.get("shop") == "discount" else "supermarket"
-    if t.get("amenity") == "pharmacy":
-        return "pharmacy"
-    if t.get("railway") in ("tram_stop", "station", "halt"):
-        return "tram"
-    return "gym"
-
-
 def main():
     if "--pbf" in sys.argv:
         elements = read_pbf(sys.argv[sys.argv.index("--pbf") + 1])
@@ -134,7 +161,8 @@ def main():
         elements = fetch()
         source = "© OpenStreetMap contributors (ODbL), via Overpass API"
 
-    out = {k: [] for k in ("discounter", "supermarket", "gym", "pharmacy", "tram")}
+    out = {k: [] for k in ("discounter", "supermarket", "gym", "pharmacy", "tram",
+                           "bakery", "doctor", "park", "parcel", "kiosk")}
     seen_tram = set()
     for el in elements:
         t = el.get("tags", {})
@@ -142,12 +170,17 @@ def main():
         lon = el.get("lon") or el.get("center", {}).get("lon")
         if lat is None:
             continue
-        cat = category(t)
+        cat = category(t, el["type"] == "node")
+        if cat is None:
+            continue
         name = t.get("name") or t.get("brand")
+        if cat == "parcel" and t.get("amenity") == "parcel_locker":
+            name = " ".join(filter(None, (t.get("brand") or t.get("name") or "Paketstation", t.get("ref"))))
         if not name:
-            if cat in ("tram", "gym"):
+            if cat in ("tram", "gym", "park", "doctor"):
                 continue
-            name = {"discounter": "Discounter", "supermarket": "Supermarket", "pharmacy": "Apotheke"}[cat]
+            name = {"discounter": "Discounter", "supermarket": "Supermarket", "pharmacy": "Apotheke",
+                    "bakery": "Bäckerei", "kiosk": "Kiosk", "parcel": "Post office"}[cat]
         if t.get("disused") or t.get("shop") == "vacant":
             continue
         if cat == "tram":
@@ -163,6 +196,10 @@ def main():
                 p[dst] = t[src]
         if address(t):
             p["address"] = address(t)
+        if late_open(t.get("opening_hours")):
+            p["late"] = True
+        if cat == "parcel":
+            p["kind"] = "locker" if t.get("amenity") == "parcel_locker" else "office"
         out[cat].append(p)
 
     for v in out.values():

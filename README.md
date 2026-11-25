@@ -1,46 +1,66 @@
 # Bonn Apartment Map
 
-A small web map for apartment hunting in Bonn. Add an apartment address and it shows:
+A web map for apartment hunting in Bonn. Add an apartment and see what's in walking distance, how long the commute is, and whether the rent is fair.
 
-- **Walking areas** (5 / 10 / 15 min) around the apartment
-- Real walking time to the nearest **discounter** (Aldi, Lidl, Penny, Netto, Norma), **gym** (with approx. monthly price), **pharmacy**, **Stadtbahn stop**
-- The nearest **train station with direct trains to Köln / Düsseldorf**, with trains per day and fastest travel time
-- **Commute to work** by public transport (arrive by 09:00 on a weekday), bike and on foot
-- A 0–100 **score** weighted by your priorities, and a **compare table** of all saved apartments
+## Features
 
-Toggle map layers for discounters, other supermarkets, gyms, train stations, Stadtbahn/tram stops and pharmacies.
-Every place links to its website, Google Maps (ratings/reviews) and OpenStreetMap.
+**Per apartment**
+- Walking areas (5 / 10 / 15 min) and real walking times to the nearest discounter, gym (with approx. price), train station with direct trains to Köln/Düsseldorf, Stadtbahn stop, supermarket and pharmacy
+- *More nearby*: bakery, family doctor, park, Packstation/post office, kiosk
+- Commute to work by public transport (arrive by 09:00 on a weekday), bike and on foot; tap a line in the journey to see it on the map
+- Evening/weekend: last direct train back from Köln, weekend frequency, and the connection home from Köln Hbf after 00:30 on a Friday night
+- Rent check: cold €/m² vs. typical asking rents in the Stadtteil (below typical / typical / above typical)
+- A 0–100 score weighted by your priorities (⋯ → Settings), and a compare table
 
-Apartments are saved in your browser (localStorage). Use *⋯ → Export/Import* to move them between devices.
+**Map**
+- Layers: discounters (filter by chain), gyms (studios hidden by default, filter by known price / max price), train stations, supermarkets, Stadtbahn stops, pharmacies, bakeries, family doctors, parks, Packstation & post, kiosks
+- Transport lines: trains/S-Bahn/Stadtbahn and buses; tap a line to highlight it with its stops
+- Neighbourhood heatmap: Bonn coloured by your priorities, to see which districts to search in
 
-## How it works
+**Sync** between laptop and phone through a secret GitHub Gist (⋯ → Sync between devices). Without it, apartments stay in the browser; ⋯ → Export/Import also works.
 
-Static site (plain HTML/JS + [Leaflet](https://leafletjs.com)), no build step, no API keys.
+## Data
 
-| What | Source | When |
+| What | Source | Updated |
 |---|---|---|
-| Shops, gyms, pharmacies, tram stops | OpenStreetMap via Overpass → `data/pois.json` | weekly (GitHub Action) |
-| Stations + direct trains | [gtfs.de](https://gtfs.de) regional + long-distance GTFS (DELFI) → `data/stations.json` | weekly (GitHub Action) |
-| Gym prices | hand-curated `data/gym_prices.json` | edit any time |
-| Address search | [Photon](https://photon.komoot.io) | live |
-| Walking areas, walking/bike times | [FOSSGIS Valhalla](https://valhalla1.openstreetmap.de) | live |
-| Public transport journeys | [Transitous](https://transitous.org) | live |
+| Shops, gyms, doctors, parks, stops, … | OpenStreetMap (Geofabrik extract) → `data/pois.json` | weekly (GitHub Action) |
+| Transport lines | OpenStreetMap route relations → `data/lines_rail.json`, `data/lines_bus.json` | weekly |
+| Stations + direct trains, weekend, last trains | [gtfs.de](https://gtfs.de) regional + long-distance GTFS (DELFI) → `data/stations.json` | weekly |
+| Gym prices | hand-curated `data/gym_prices.json` | by hand |
+| Typical asking rents | hand-curated `data/rents.json` | by hand |
+| Address search | [Photon](https://photon.komoot.io), fallback Nominatim | live |
+| Walking areas / walking & bike times | [FOSSGIS Valhalla](https://valhalla1.openstreetmap.de) | live |
+| Public transport journeys, heatmap commute | [Transitous](https://transitous.org) | live |
 
-### Update data locally
+Missing or wrong place? Fix it on [openstreetmap.org](https://www.openstreetmap.org); the map picks it up after the next weekly refresh.
 
-```bash
-python3 scripts/build_pois.py                      # needs access to overpass-api.de
-python3 scripts/build_stations.py <rv-gtfs-dir> <fv-gtfs-dir>
-python3 -m http.server 8000                        # open http://localhost:8000
+## Updating gym prices
+
+OSM has no prices. `data/gym_prices.json` maps gym chains to their cheapest plan:
+
+```json
+{"chain": "FitX", "match": "fit ?x", "monthly_eur": 29.0, "joining_fee_eur": 29.0,
+ "min_term_months": 12, "website": "https://www.fitx.de", "note": "…", "source": "https://…", "checked": "2026-11"}
 ```
 
-### Gym prices
+- `match` is a case-insensitive regular expression tested against the gym's brand + name.
+- When you check a price, update `monthly_eur` and `checked`. Edit the file directly on GitHub (pencil icon); the site updates in about a minute, no rebuild needed.
+- To add a gym, copy an entry and change `chain`, `match` and the prices.
 
-OSM has no prices, so `data/gym_prices.json` maps gym chains (regex on name/brand) to their cheapest advertised plan.
-The values come from comparison portals (Nov 2026) and are approximate: always verify on the gym's site.
+## Updating rents
 
-## Ideas / next steps
+`data/rents.json` holds typical asking rents (Kaltmiete €/m²) per Stadtteil from several portals. Area names must match the OSM Stadtteil name (as shown in the app, e.g. "Beuel-Mitte"). Add values as `{"v": 13.5, "s": "is24"}`.
 
-- Rent levels per district (Bonn Mietspiegel 2026)
-- Heatmap: which neighbourhoods score best for your priorities
-- More POI categories (bakery, doctor, park, Rhine promenade)
+## Development
+
+Static site, no build step, no API keys.
+
+```bash
+python3 -m http.server 8000                                  # open http://localhost:8000
+pip install osmium
+python3 scripts/build_pois.py --pbf koeln-regbez-latest.osm.pbf
+python3 scripts/build_lines.py koeln-regbez-latest.osm.pbf
+python3 scripts/build_stations.py <rv-gtfs-dir> <fv-gtfs-dir>
+```
+
+The workflow `.github/workflows/refresh-data.yml` runs these every Monday and commits the results.

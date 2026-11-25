@@ -72,7 +72,10 @@ def station_for(name, lat, lon):
             return s
     s = {"name": clean(name), "lat": lat, "lon": lon, "departures": 0, "lines": set(),
          "to": {k: {"trips": 0, "fastest": None, "lines": set(), "first": None, "last": None}
-                for k in TARGETS}, "days": set()}
+                for k in TARGETS}, "days": set(),
+         # extra days: trains TO the target on Sat/Sun, and trains BACK from the target
+         "wk": collections.defaultdict(lambda: collections.defaultdict(lambda: {"trips": 0, "last": None})),
+         "back": collections.defaultdict(lambda: collections.defaultdict(lambda: {"trips": 0, "last": None, "fastest": None}))}
     stations.append(s)
     return s
 
@@ -172,6 +175,47 @@ def process(feed):
                 hhmm = dep[:5]
                 t["first"] = hhmm if t["first"] is None or hhmm < t["first"] else t["first"]
                 t["last"] = hhmm if t["last"] is None or hhmm > t["last"] else t["last"]
+
+    # Evening / weekend: Tue (weekday), Fri (Friday night), Sat, Sun of the same week.
+    d0 = min(r["start_date"] for r in cal) if cal else day.strftime("%Y%m%d")
+    d1 = max([r["end_date"] for r in cal] + [r["date"] for r in cal_dates])
+    for key, offset in (("wd", 0), ("fri", 3), ("sat", 4), ("sun", 5)):
+        dd = day + datetime.timedelta(days=offset)
+        if not (d0 <= dd.strftime("%Y%m%d") <= d1):
+            continue
+        act = active if offset == 0 else active_on(dd)
+        for tid, seq in by_trip.items():
+            trip = rail_trip[tid]
+            if trip["service_id"] not in act:
+                continue
+            seq.sort()
+            rt = routes.get(trip["route_id"], {})
+            line = (rt.get("route_short_name") or "").strip()
+            if line[:-1].isdigit() and line.endswith("N"):
+                continue
+            for i, (_, p, dep, _, pick, _) in enumerate(seq):
+                if pick == "1":
+                    continue
+                if p in local and key in ("sat", "sun"):
+                    seen = set()
+                    for _, q, _, _, _, drop in seq[i + 1:]:
+                        k = target_of.get(q)
+                        if k and k not in seen and drop != "1":
+                            seen.add(k)
+                            w = station_for(*local[p])["wk"][key][k]
+                            w["trips"] += 1
+                            w["last"] = max(w["last"] or "", dep[:5])
+                k = target_of.get(p)
+                if k:
+                    seen = set()
+                    for _, q, _, arr, _, drop in seq[i + 1:]:
+                        if q in local and q not in seen and drop != "1":
+                            seen.add(q)
+                            b = station_for(*local[q])["back"][key][k]
+                            b["trips"] += 1
+                            b["last"] = max(b["last"] or "", dep[:5])
+                            dur = (secs(arr) - secs(dep)) // 60
+                            b["fastest"] = dur if b["fastest"] is None else min(b["fastest"], dur)
     return day
 
 
@@ -184,6 +228,12 @@ for s in stations:
     direct = {k: {"label": TARGETS[k][0], "trips_per_day": t["trips"], "fastest_min": t["fastest"],
                   "lines": sorted(t["lines"]), "first": t["first"], "last": t["last"]}
               for k, t in s["to"].items() if t["trips"]}
+    for k in direct:
+        for key in ("sat", "sun"):
+            w = s["wk"].get(key, {}).get(k)
+            direct[k][key] = {"trips": w["trips"], "last": w["last"]} if w else {"trips": 0, "last": None}
+        direct[k]["back"] = {key: dict(s["back"][key][k]) for key in ("wd", "fri", "sat", "sun")
+                             if key in s["back"] and k in s["back"][key]}
     out.append({"name": s["name"], "lat": round(s["lat"], 6), "lon": round(s["lon"], 6),
                 "departures_per_day": s["departures"], "lines": sorted(s["lines"]), "direct": direct})
 out.sort(key=lambda s: -s["departures_per_day"])
@@ -192,7 +242,7 @@ res = {
     "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
     "sample_days": sorted({d.isoformat() for d in days}),
     "source": "gtfs.de (regional + long-distance), data by DELFI e.V., CC BY 4.0",
-    "note": "Counts are for one weekday (a Tuesday) and only for trains FROM the station TO the target.",
+    "note": "trips_per_day/first/last: Tuesday, trains FROM the station TO the target. sat/sun: same on the weekend. back.*: trains FROM the target TO the station (wd=Tue, fri=Friday incl. after midnight, sat, sun); times after midnight are shown as 24:xx/25:xx.",
     "stations": out,
 }
 dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "stations.json")
