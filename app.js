@@ -735,7 +735,11 @@ function setPicking(on) {
   $("#pick-on-map").classList.toggle("active", on);
   $("#pick-on-map").textContent = on ? "Click a spot on the map… (Esc to cancel)" : "…or click on the map";
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && picking) setPicking(false); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+  if (picking) setPicking(false);
+  else if (selectedId) deselectApt();
+});
 map.on("click", async (e) => {
   if (!picking) return;
   setPicking(false);
@@ -780,7 +784,7 @@ $("#apt-delete").addEventListener("click", () => {
   if (!editing?.id || !confirm(`Delete “${editing.label}”?`)) return;
   apts = apts.filter((a) => a.id !== editing.id);
   tombstone(editing.id);
-  if (selectedId === editing.id) { selectedId = null; $("#detail").hidden = true; isoLayer.clearLayers(); highlightLayer.clearLayers(); }
+  if (selectedId === editing.id) { deselectApt(); }
   editing = null;
   $("#apt-dialog").close("deleted");
   saveApts(); renderApts();
@@ -973,15 +977,27 @@ function renderApts() {
     li.innerHTML = `<span class="num">${i + 1}</span><span class="title">${esc(a.label || a.addr)}</span>
       <span class="score ${scoreClass(sc)}" title="Score 0–100 based on your priorities">${sc ?? "…"}</span>
       <span class="meta">${esc(meta || a.addr)}</span>`;
-    li.addEventListener("click", () => selectApt(a.id));
+    li.addEventListener("click", () => toggleApt(a.id));
     ul.appendChild(li);
     L.marker([a.lat, a.lon], {
       icon: L.divIcon({ className: "", html: `<div class="marker-apt${a.id === selectedId ? " selected" : ""}"><span>${i + 1}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 30] }),
       zIndexOffset: a.id === selectedId ? 2000 : 1500,
-    }).on("click", () => selectApt(a.id)).bindTooltip(esc(a.label || a.addr), { direction: "top", offset: [0, -28] }).addTo(aptLayer);
+    }).on("click", () => toggleApt(a.id)).bindTooltip(esc(a.label || a.addr), { direction: "top", offset: [0, -28] }).addTo(aptLayer);
   });
 }
 
+$("#detail").addEventListener("click", (e) => { if (e.target.closest(".close-detail")) deselectApt(); });
+// Clicking the selected apartment again hides its walking areas and details.
+function toggleApt(id) {
+  if (id === selectedId) deselectApt(); else selectApt(id);
+}
+function deselectApt() {
+  selectedId = null;
+  isoLayer.clearLayers();
+  highlightLayer.clearLayers();
+  $("#detail").hidden = true;
+  renderApts();
+}
 async function selectApt(id, opts = {}) {
   selectedId = id;
   const a = apts.find((x) => x.id === id);
@@ -1053,7 +1069,8 @@ function renderDetail(a, loading) {
   const an = a.analysis?.key === analysisKey() ? a.analysis : null;
   const sc = scoreOf(an);
   const head = `<div class="detail-head"><div><h3>${esc(a.label || "Apartment")}</h3><div class="small muted">${esc(a.addr)}</div></div>
-    ${sc != null ? `<span class="score ${scoreClass(sc)}" style="font-size:16px">${sc}</span>` : ""}</div>`;
+    <div class="row gap-s">${sc != null ? `<span class="score ${scoreClass(sc)}" style="font-size:16px">${sc}</span>` : ""}
+    <button type="button" class="btn ghost small close-detail" title="Close (Esc): hide walking areas" aria-label="Close">✕</button></div></div>`;
   const facts0 = [];
   if (a.rent || a.size || a.rooms) {
     facts0.push(fact("💶", "Rent", a.rent ? `${eur(a.rent)} warm` : a.coldRent ? `${eur(a.coldRent)} cold` : "–", "", [a.coldRent && a.rent ? `${eur(a.coldRent)} cold` : "", a.size ? `${a.size} m²` : "", a.rooms ? `${a.rooms} rooms` : "", a.rent && a.size ? `${(a.rent / a.size).toFixed(2)} €/m²` : "", a.available ? `from ${esc(a.available)}` : ""].filter(Boolean).join(" · ")));
@@ -1292,7 +1309,7 @@ const Sync = {
         await this.gh(`/gists/${this.gistId}`, { method: "PATCH", body: JSON.stringify({ files: { [this.file]: { content: JSON.stringify(out) } } }) });
       }
       if (settingsChanged) drawWork();
-      if (selectedId && !apts.some((a) => a.id === selectedId)) { selectedId = null; $("#detail").hidden = true; isoLayer.clearLayers(); highlightLayer.clearLayers(); }
+      if (selectedId && !apts.some((a) => a.id === selectedId)) { deselectApt(); }
       renderApts();
       analyzeRest();
       this.status(`Synced ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`, "ok");
