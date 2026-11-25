@@ -15,6 +15,11 @@
   --c-supermarket: #7db36b;
   --c-gym: #7a3fc2;
   --c-pharmacy: #d23b3b;
+  --c-bakery: #b8742a;
+  --c-doctor: #0f8f8f;
+  --c-park: #4f9a2f;
+  --c-parcel: #e0b000;
+  --c-kiosk: #c43f8e;
   --c-tram: #2a8fd6;
   --c-station: #12355e;
   color-scheme: light;
@@ -205,3 +210,7 @@ ol.steps li { margin-bottom: 4px; }
 
 .heat-legend { background: var(--panel); color: var(--text); padding: 6px 8px; border-radius: 8px; box-shadow: var(--shadow); width: 170px; }
 .heat-legend .bar { height: 8px; border-radius: 4px; margin: 4px 0 2px; background: linear-gradient(90deg, rgb(194,65,45), rgb(224,173,58), rgb(30,138,76)); }
+
+.more-nearby { grid-column: 2 / 4; }
+.more-nearby summary { cursor: pointer; }
+.more-nearby ul { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 2px; }

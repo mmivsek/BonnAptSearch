@@ -17,7 +17,7 @@ const CFG = {
   valhalla: "https://valhalla1.openstreetmap.de",
   transitous: "https://api.transitous.org/api/v5/plan",
   overpass: ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"],
-  analysisVersion: 4,
+  analysisVersion: 6,
 };
 
 const DEFAULT_SETTINGS = {
@@ -37,7 +37,13 @@ const CATS = {
   supermarket: { label: "Other supermarkets", one: "Supermarket", sub: "Rewe, Edeka, Kaufland…", icon: "🛍️", color: "--c-supermarket", on: false, good: 5, bad: 20 },
   tram: { label: "Stadtbahn / tram stops", one: "Stadtbahn stop", icon: "🚊", color: "--c-tram", on: false },
   pharmacy: { label: "Pharmacies", one: "Pharmacy", icon: "💊", color: "--c-pharmacy", on: false, good: 5, bad: 20 },
+  bakery: { label: "Bakeries", one: "Bakery", icon: "🥐", color: "--c-bakery", on: false },
+  doctor: { label: "Family doctors", one: "Family doctor (GP)", sub: "Allgemeinmedizin", icon: "🩺", color: "--c-doctor", on: false },
+  park: { label: "Parks", one: "Park", icon: "🌳", color: "--c-park", on: false },
+  parcel: { label: "Packstation & post", one: "Parcel / post", sub: "DHL Packstation, post offices", icon: "📦", color: "--c-parcel", on: false },
+  kiosk: { label: "Kiosks", one: "Kiosk", sub: "late-night Büdchen", icon: "🏪", color: "--c-kiosk", on: false },
 };
+const EXTRA_CATS = ["bakery", "doctor", "park", "parcel", "kiosk"];
 const SCORE_KEYS = {
   discounter: { label: "Discounter", good: 5, bad: 20 },
   gym: { label: "Gym", good: 5, bad: 25 },
@@ -100,17 +106,19 @@ function googleLink(p) {
 }
 
 // Local time in Europe/Berlin as ISO string with offset, for the next weekday (Tue) at hh:mm.
-function nextWeekdayISO(hhmm) {
+function nextWeekdayISO(hhmm, weekday = 2) {
   const now = new Date();
   const d = new Date(now);
   d.setDate(d.getDate() + 1);
-  while (d.getDay() !== 2) d.setDate(d.getDate() + 1); // next Tuesday
+  while (d.getDay() !== weekday) d.setDate(d.getDate() + 1); // default: next Tuesday
   const date = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }); // YYYY-MM-DD
   const probe = new Date(`${date}T12:00:00Z`);
   const off = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Berlin", timeZoneName: "longOffset" })
     .formatToParts(probe).find((p) => p.type === "timeZoneName").value.replace("GMT", "") || "+00:00";
   return { iso: `${date}T${hhmm}:00${off}`, date };
 }
+// GTFS times can exceed 24:00 ("25:10" = 01:10 the next morning)
+const gtfsTime = (t) => { if (!t) return "–"; const [h, m] = t.split(":").map(Number); return `${String(h % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`; };
 const hhmmBerlin = (iso) => new Date(iso).toLocaleTimeString("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
 
 // ---------- state ----------
@@ -140,6 +148,8 @@ function poiPopup(cat, p) {
   let h = `<div class="pop"><div class="pop-cat">${c.icon} ${esc(c.one)}</div><div class="pop-title">${esc(p.name)}</div>`;
   if (p.address) h += `<div class="small muted">${esc(p.address)}</div>`;
   if (p.hours) h += `<div class="small">🕑 ${esc(p.hours)}</div>`;
+  if (p.late) h += `<div class="small"><span class="pill">🌙 Open late (22:00+)</span></div>`;
+  if (cat === "parcel") h += `<div class="small muted">${p.kind === "locker" ? "Parcel locker" : "Post office / parcel shop"}</div>`;
   if (p.studio) h += `<div class="small"><span class="pill">Studio / specialised</span></div>`;
   if (p.women) h += `<div class="small"><span class="pill">Women only</span></div>`;
   if (p.price) {
@@ -160,8 +170,15 @@ function poiPopup(cat, p) {
       h += `<table style="margin-top:6px"><tr><th>Direct to</th><th>trains/day</th><th>fastest</th><th>first–last</th></tr>`;
       for (const k of rows) h += `<tr><td>${esc(d[k].label)}</td><td>${d[k].trips_per_day}</td><td>${d[k].fastest_min} min</td><td>${esc(d[k].first)}–${esc(d[k].last)}</td></tr>`;
       h += `</table>`;
+      h += `<table style="margin-top:6px"><tr><th>Weekend / night</th><th>Sat</th><th>Sun</th><th>last back (Mon–Thu / Fri / Sat)</th></tr>`;
+      for (const k of rows) {
+        const b = d[k].back || {};
+        h += `<tr><td>${esc(d[k].label)}</td><td>${d[k].sat?.trips ?? "–"}</td><td>${d[k].sun?.trips ?? "–"}</td>
+          <td>${gtfsTime(b.wd?.last)} / ${gtfsTime(b.fri?.last)} / ${gtfsTime(b.sat?.last)}</td></tr>`;
+      }
+      h += `</table>`;
     } else h += `<div class="small muted" style="margin-top:4px">No direct trains to Köln/Düsseldorf.</div>`;
-    h += `<div class="small muted">Weekday (Tue) timetable, departures from this station.</div>`;
+    h += `<div class="small muted">Direct regional + long-distance trains. Weekday = Tuesday; "last back" = last direct train from there to this station (night trains included).</div>`;
   }
   const links = [];
   if (p.website) links.push(`<a href="${esc(p.website)}" target="_blank" rel="noopener">Website</a>`);
@@ -813,8 +830,8 @@ async function analyze(apt) {
 
   // 2) real walking times to the nearest candidates (by air) of each category
   const groups = [];
-  for (const cat of ["discounter", "gym", "supermarket", "pharmacy"]) {
-    groups.push({ key: cat, cat, cands: nearestByAir(poisOf(cat), lat, lon, 5) });
+  for (const cat of ["discounter", "gym", "supermarket", "pharmacy", ...EXTRA_CATS]) {
+    groups.push({ key: cat, cat, cands: nearestByAir(poisOf(cat), lat, lon, EXTRA_CATS.includes(cat) ? 3 : 5) });
   }
   groups.push({ key: "stationKoeln", cat: "station", cands: nearestByAir(DATA.stations, lat, lon, 4, (s) => s.direct?.koeln || s.direct?.koeln_deutz) });
   groups.push({ key: "stationDdf", cat: "station", cands: nearestByAir(DATA.stations, lat, lon, 3, (s) => s.direct?.duesseldorf) });
@@ -824,8 +841,12 @@ async function analyze(apt) {
   let times = null;
   if (targets.length) {
     try {
-      const m = await postJSON(`${CFG.valhalla}/sources_to_targets`, { sources: [{ lat, lon }], targets, costing: "pedestrian" });
-      times = m.sources_to_targets[0];
+      // the public server limits matrix size, so ask in chunks
+      times = [];
+      for (let i = 0; i < targets.length; i += 25) {
+        const m = await postJSON(`${CFG.valhalla}/sources_to_targets`, { sources: [{ lat, lon }], targets: targets.slice(i, i + 25), costing: "pedestrian" });
+        times.push(...m.sources_to_targets[0]);
+      }
     } catch (e) { res.errors.push(`Walking times: ${e.message} (showing straight-line estimates)`); }
   }
   for (const g of groups) {
@@ -872,6 +893,19 @@ async function analyze(apt) {
     }
     if (d.direct?.length) res.commute.walkDirect = d.direct[0].duration;
   } catch (e) { res.errors.push(`Public transport: ${e.message}`); }
+  // 3b) getting home after a Friday night out in Köln (leave Köln Hbf after 00:30 Saturday)
+  try {
+    const sat = nextWeekdayISO("00:30", 6);
+    const d = await getJSON(`${CFG.transitous}?fromPlace=50.94303,6.958727&toPlace=${lat},${lon}&time=${encodeURIComponent(sat.iso)}`);
+    const it = (d.itineraries || [])[0];
+    if (it) {
+      res.night = {
+        dep: hhmmBerlin(it.startTime), arr: hhmmBerlin(it.endTime), sec: it.duration, transfers: it.transfers,
+        lines: it.legs.filter((l) => l.mode !== "WALK").map((l) => l.displayName || l.routeShortName || l.mode),
+      };
+    }
+  } catch (e) { res.errors.push(`Night connection: ${e.message}`); }
+
   for (const costing of ["bicycle", "pedestrian"]) {
     try {
       const r = await postJSON(`${CFG.valhalla}/route`, { locations: [{ lat, lon }, { lat: settings.workLat, lon: settings.workLon }], costing, units: "kilometers" });
@@ -1053,7 +1087,10 @@ function renderDetail(a, loading) {
     if (d.koeln) parts.push(`Köln Hbf ${d.koeln.trips_per_day}×/day, ${d.koeln.fastest_min} min`);
     else if (d.koeln_deutz) parts.push(`Köln Messe/Deutz ${d.koeln_deutz.trips_per_day}×/day, ${d.koeln_deutz.fastest_min} min`);
     if (d.duesseldorf) parts.push(`Düsseldorf ${d.duesseldorf.trips_per_day}×/day, ${d.duesseldorf.fastest_min} min`);
-    f.push(fact("🚆", `Station: ${esc(st.name)}`, fmtMin(st.sec) + est(st), grade(st.sec / 60, 8, 30), `Direct: ${parts.join(" · ")}`));
+    const kb = (d.koeln || d.koeln_deutz)?.back;
+    const kw = d.koeln || d.koeln_deutz;
+    const night = kb ? `<br>Last direct train back from ${esc(kw.label)}: ${gtfsTime(kb.wd?.last)} (Fri ${gtfsTime(kb.fri?.last)}, Sat ${gtfsTime(kb.sat?.last)}) · Weekend: ${kw.sat?.trips ?? "–"} trains Sat, ${kw.sun?.trips ?? "–"} Sun` : "";
+    f.push(fact("🚆", `Station: ${esc(st.name)}`, fmtMin(st.sec) + est(st), grade(st.sec / 60, 8, 30), `Direct: ${parts.join(" · ")}${night}`));
   }
   const sd = n.stationDdf;
   if (sd && (!st || sd.name !== st.name)) {
@@ -1063,6 +1100,8 @@ function renderDetail(a, loading) {
   if (n.tram) f.push(fact("🚊", `Stadtbahn: ${esc(n.tram.name)}`, fmtMin(n.tram.sec) + est(n.tram), grade(n.tram.sec / 60, 5, 15), "Lines 16/18 also run direct to Köln city centre (≈60 min)"));
   if (n.supermarket) f.push(fact("🛍️", `Supermarket: ${esc(n.supermarket.name)}`, fmtMin(n.supermarket.sec) + est(n.supermarket), grade(n.supermarket.sec / 60, 5, 20), within("supermarket")));
   if (n.pharmacy) f.push(fact("💊", `Pharmacy: ${esc(n.pharmacy.name)}`, fmtMin(n.pharmacy.sec) + est(n.pharmacy), grade(n.pharmacy.sec / 60, 5, 20), ""));
+  const more = EXTRA_CATS.filter((c) => n[c]).map((c) => `<li>${CATS[c].icon} ${esc(n[c].name)} <span class="muted">· ${fmtMin(n[c].sec)}${est(n[c])}</span></li>`);
+  if (more.length) f.push(`<li class="fact"><span class="ico">➕</span><details class="more-nearby"><summary class="what">More nearby (walking)</summary><ul>${more.join("")}</ul></details></li>`);
 
   const c = an.commute || {};
   const t = c.transit;
@@ -1073,6 +1112,12 @@ function renderDetail(a, loading) {
   }
   if (c.bike) f.push(fact("🚲", "By bike", fmtMin(c.bike.sec), grade(c.bike.sec / 60, 10, 30), `${c.bike.km.toFixed(1)} km`));
   if (c.walk) f.push(fact("🚶", "On foot", fmtMin(c.walk.sec), grade(c.walk.sec / 60, 15, 45), `${c.walk.km.toFixed(1)} km`));
+  if (an.night) {
+    const nt = an.night;
+    const wait = (() => { const [h, m] = nt.dep.split(":").map(Number); return ((h * 60 + m) - 30 + 1440) % 1440; })();
+    f.push(fact("🌙", "Home from Köln Hbf, Fri night", `${nt.arr}`, wait <= 30 && nt.sec <= 3600 ? "good" : wait <= 75 ? "ok" : "bad",
+      `Leaving after 00:30: next departs ${nt.dep}, arrives ${nt.arr} · ${nt.transfers} transfer${nt.transfers === 1 ? "" : "s"} · ${nt.lines.map(esc).join(" → ") || "walk"}`));
+  }
 
   const g = (q) => `https://www.google.com/maps/dir/?api=1&origin=${a.lat},${a.lon}&destination=${q}`;
   const links = [
