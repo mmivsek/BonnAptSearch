@@ -416,9 +416,11 @@ function highlightLine(id, zoom = false) {
 // Highlight a line by its public name, e.g. from a journey leg ("611", "RB30", "16").
 async function highlightByRef(ref, mode) {
   await Promise.all([loadLines("rail"), loadLines("bus")]);
-  const norm = (s) => String(s).replace(/\s+/g, "").toUpperCase();
+  // OSM refs can carry extras, e.g. "RE 5 (RRX)" for "RE5"
+  const norm = (s) => String(s).replace(/\(.*?\)/g, "").replace(/\s+/g, "").toUpperCase();
   const want = mode === "BUS" ? ["bus"] : /TRAM|SUBWAY|METRO/.test(mode) ? ["tram"] : /RAIL|SUBURBAN|TRAIN|DISTANCE/.test(mode) ? ["train"] : ["train", "tram", "bus"];
-  const hit = allLines().find((l) => norm(l.ref) === norm(ref) && want.includes(l.mode)) || allLines().find((l) => norm(l.ref) === norm(ref));
+  const r = norm(ref);
+  const hit = allLines().find((l) => norm(l.ref) === r && want.includes(l.mode)) || allLines().find((l) => norm(l.ref) === r);
   if (hit) highlightLine(hit.id, true); else toast(`Line ${ref} not found in map data.`);
 }
 for (const kind of ["rail", "bus"]) {
@@ -1097,7 +1099,14 @@ function renderDetail(a, loading) {
     const d = sd.direct.duesseldorf;
     f.push(fact("🚆", `To Düsseldorf: ${esc(sd.name)}`, fmtMin(sd.sec) + est(sd), grade(sd.sec / 60, 8, 30), `Direct ${d.trips_per_day}×/day, fastest ${d.fastest_min} min`));
   }
-  if (n.tram) f.push(fact("🚊", `Stadtbahn: ${esc(n.tram.name)}`, fmtMin(n.tram.sec) + est(n.tram), grade(n.tram.sec / 60, 5, 15), "Lines 16/18 also run direct to Köln city centre (≈60 min)"));
+  if (n.tram) {
+    // which Stadtbahn/tram lines stop here (matched by stop name and proximity)
+    const served = (LINES.rail || []).filter((l) => l.mode === "tram" && l.stops.some(([la, lo, nm]) =>
+      flatDist(la, lo, n.tram.lat, n.tram.lon) < 250 && (nm.includes(n.tram.name) || n.tram.name.includes(nm.replace(/^Bonn[ -]/, "")))));
+    const refs = served.map((l) => `<span class="pill clickable" data-ref="${esc(l.ref)}" data-mode="TRAM">${esc(l.ref)}</span>`).join(" ");
+    const koeln = served.some((l) => l.ref === "16" || l.ref === "18") ? " · 16/18 run direct to Köln (≈60 min)" : "";
+    f.push(fact("🚊", `Stadtbahn: ${esc(n.tram.name)}`, fmtMin(n.tram.sec) + est(n.tram), grade(n.tram.sec / 60, 5, 15), `${refs ? "Lines " + refs : ""}${koeln}`));
+  }
   if (n.supermarket) f.push(fact("🛍️", `Supermarket: ${esc(n.supermarket.name)}`, fmtMin(n.supermarket.sec) + est(n.supermarket), grade(n.supermarket.sec / 60, 5, 20), within("supermarket")));
   if (n.pharmacy) f.push(fact("💊", `Pharmacy: ${esc(n.pharmacy.name)}`, fmtMin(n.pharmacy.sec) + est(n.pharmacy), grade(n.pharmacy.sec / 60, 5, 20), ""));
   const more = EXTRA_CATS.filter((c) => n[c]).map((c) => `<li>${CATS[c].icon} ${esc(n[c].name)} <span class="muted">· ${fmtMin(n[c].sec)}${est(n[c])}</span></li>`);
@@ -1407,7 +1416,9 @@ $("#panel-toggle").addEventListener("click", () => {
   try { await loadData(); } catch (e) { console.error(e); toast(`Data load failed: ${e.message}`); }
   buildLayers();
   renderApts();
+  await loadLines("rail"); // also used to list the lines at the nearest Stadtbahn stop
   initLines();
+  if (selectedId) renderDetail(apts.find((x) => x.id === selectedId), false);
   if (store.get("heatOn", false)) { $("#heat-toggle").checked = true; setHeat(true); }
   renderSyncBadge();
   Sync.run();
