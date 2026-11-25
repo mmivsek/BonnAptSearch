@@ -757,6 +757,12 @@ function chooseSuggestion(i) {
   $("#search").value = "";
   const [lon, lat] = f.geometry.coordinates;
   const l = photonLabel(f);
+  if (pendingImport) {
+    const d = pendingImport;
+    pendingImport = null;
+    importListing({ ...d, addr: l.full, lat, lon, approx: false });
+    return;
+  }
   openAptDialog({ addr: l.full, lat, lon, label: l.l1 });
 }
 
@@ -784,6 +790,130 @@ map.on("click", async (e) => {
   openAptDialog({ addr, lat, lon: lng, label });
 });
 
+// ---------- import a listing: pasted text (B) or "#add?…" magic link (A) ----------
+// German number: "1.250,50" → 1250.5, "58,5" → 58.5, "750" → 750
+function deNum(s) {
+  if (s == null) return null;
+  let t = String(s).replace(/[^\d.,]/g, "");
+  if (!t) return null;
+  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/\.\d{3}(\D|$)/.test(t) || /^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  else t = t.replace(",", ".");
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? n : null;
+}
+// Find a value next to a label, in either order ("Kaltmiete: 750 €" or "750 € Kaltmiete").
+function near(text, labelRx, valueRx, { after = 60, before = 25 } = {}) {
+  const m = new RegExp(labelRx.source, "i").exec(text);
+  if (!m) return null;
+  const tail = text.slice(m.index + m[0].length, m.index + m[0].length + after);
+  const v1 = new RegExp(valueRx.source, "i").exec(tail);
+  if (v1 && !/[a-zäöü]{4,}/i.test(tail.slice(0, v1.index).replace(/zzgl|inkl|nebenkosten|heizkosten|ca|in|von|warm|kalt|euro|eur|mtl|monatlich|\(|\)/gi, ""))) return v1[1];
+  const head = text.slice(Math.max(0, m.index - before), m.index);
+  const all = [...head.matchAll(new RegExp(valueRx.source, "gi"))];
+  if (all.length) return all[all.length - 1][1];
+  return v1 ? v1[1] : null;
+}
+const EUR = /(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(?:€|eur|euro)/;
+const SQM = /(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:m²|m2|qm|quadratmeter)/;
+const STREET_RX = /([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\- ]{2,40}?(?:straße|strasse|str\.|weg|allee|platz|gasse|ring|ufer|damm|chaussee|berg|hof|markt|pfad|steig|zeile|promenade|graben|wall|kamp|feld|busch|garten)\s*\d+\s*[a-zA-Z]?)\s*,?\s*(\d{5})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß\- ]{2,30})/;
+
+function parseListing(raw) {
+  const text = raw.replace(/ /g, " ").replace(/[ \t]+/g, " ");
+  const flat = text.replace(/\s*\n\s*/g, " \n ");
+  const out = {};
+  out.coldRent = deNum(near(flat, /kaltmiete|nettokaltmiete|miete \(kalt\)|kaltmiete \(zzgl\. nebenkosten\)/, EUR));
+  out.rent = deNum(near(flat, /warmmiete|gesamtmiete|miete \(warm\)|monatsmiete warm/, EUR));
+  const nk = deNum(near(flat, /nebenkosten/, EUR));
+  const hk = /heizkosten in nebenkosten enthalten|heizkosten:? ?in nk enthalten/i.test(flat) ? 0 : deNum(near(flat, /heizkosten/, EUR));
+  if (!out.rent && out.coldRent && nk != null) out.rent = Math.round(out.coldRent + nk + (hk || 0));
+  if (!out.coldRent && out.rent && nk != null && nk < out.rent) out.coldRent = Math.round(out.rent - nk - (hk || 0));
+  if (!out.coldRent && !out.rent) out.coldRent = deNum(near(flat, /\bmiete\b|preis/, EUR));
+  out.size = deNum(near(flat, /wohnfläche|wohnflaeche|fläche|größe/, SQM)) ?? deNum((SQM.exec(flat) || [])[1]);
+  out.rooms = deNum(near(flat, /zimmer\b|zimmeranzahl|räume/, /(\d{1,2}(?:[.,]5)?)(?!\s*(?:€|m²|m2|qm|\d))/, { after: 15, before: 12 }));
+  const av = /(?:bezugsfrei ab|frei ab|verfügbar ab|einzug(?:sdatum)?|available from)[:\s]*\n?\s*([0-3]?\d\.[01]?\d\.(?:\d{2,4})?|sofort|ab sofort|nach vereinbarung|[A-Za-zäöü]+ \d{4})/i.exec(flat);
+  if (av) out.available = av[1].trim();
+  const st = STREET_RX.exec(text);
+  if (st) {
+    out.addr = `${st[1].trim()}, ${st[2]} ${st[3].trim().split(/\s{2,}|\n/)[0]}`;
+  } else {
+    // ImmoScout often hides the street: "53113 Bonn, Südstadt" → approximate location
+    const pc = /(\d{5})\s+(Bonn|Sankt Augustin|Siegburg|Troisdorf|Königswinter|Alfter|Bornheim|Wachtberg|Meckenheim|Niederkassel|Bad Honnef)\b(?:[,\s(-]+((?:Bad |Sankt )?[A-ZÄÖÜ][A-Za-zäöüß\-]+))?/.exec(text);
+    if (pc) { out.addr = [pc[3], `${pc[1]} ${pc[2]}`].filter(Boolean).join(", "); out.approx = true; }
+  }
+  const url = /https?:\/\/[^\s"'<>]+/.exec(raw);
+  if (url) out.url = url[0];
+  // a title: first reasonably long line that is not a number/label
+  const title = raw.split("\n").map((l) => l.trim()).find((l) => l.length > 12 && l.length < 90 && l.split(/\s+/).length >= 3 &&
+    !/€|m²|^\d{5}|kaltmiete|warmmiete|nebenkosten|verfügbar|bezugsfrei|frei ab|https?:|adresse/i.test(l));
+  if (title) out.title = title;
+  for (const k of Object.keys(out)) if (out[k] == null || out[k] === "") delete out[k];
+  return out;
+}
+
+// Geocode the address, then open the "New apartment" form pre-filled.
+async function importListing(d, source) {
+  let lat = d.lat != null ? Number(d.lat) : null, lon = d.lon != null ? Number(d.lon) : null, addr = d.addr || "";
+  let approx = !!d.approx;
+  if ((lat == null || lon == null) && addr) {
+    try {
+      const [hit] = await geocode(addr, 1);
+      if (hit) { [lon, lat] = hit.geometry.coordinates; if (!/\d/.test(addr.split(",")[0])) approx = true; }
+    } catch (e) { console.warn(e); }
+  }
+  if (lat == null || lon == null || Number.isNaN(lat)) {
+    toast(addr ? `Couldn't find “${addr}”. Search the address, the details are kept.` : "No address found in the listing. Search it manually; the details are kept.", 5000);
+    pendingImport = d;
+    $("#search").value = addr;
+    $("#search").focus();
+    $("#search").dispatchEvent(new Event("input"));
+    return;
+  }
+  const street = addr.split(",")[0].trim();
+  openAptDialog({
+    addr: addr || `${lat.toFixed(5)}, ${lon.toFixed(5)}`, lat, lon, approx,
+    label: d.label || (approx ? `${street} (approx.)` : street),
+    coldRent: d.coldRent ?? d.cold, rent: d.rent ?? d.warm, size: d.size, rooms: d.rooms,
+    available: d.available ?? d.from, url: d.url, notes: d.notes || (d.title ? d.title : ""),
+  });
+  if (source) $("#apt-dialog-addr").textContent = `${addr}${approx ? " · approximate location (street not given)" : ""} · from ${source}`;
+}
+let pendingImport = null; // details waiting for a manually searched address
+
+// A) magic link: #add?addr=…&cold=750&warm=980&size=58&rooms=2&from=01.02.&url=…&notes=…
+function readAddLink() {
+  const h = location.hash;
+  if (!/^#add[?&=]/.test(h)) return null;
+  let q = h.replace(/^#add[?&=]?/, "");
+  let d = {};
+  try {
+    if (/^[{%]/.test(q)) d = JSON.parse(decodeURIComponent(q)); // also accept #add={json}
+    else for (const [k, v] of new URLSearchParams(q)) d[k] = v;
+  } catch (e) { toast("This add-link looks broken."); return null; }
+  for (const k of ["cold", "warm", "coldRent", "rent", "size", "rooms", "lat", "lon"]) if (d[k] != null && d[k] !== "") d[k] = deNum(d[k]) ?? Number(d[k]);
+  if (d.approx != null) d.approx = d.approx === "1" || d.approx === "true" || d.approx === true;
+  history.replaceState(null, "", location.pathname + location.search);
+  return d;
+}
+
+// B) paste listing text
+function openPasteDialog() {
+  $("#paste-text").value = "";
+  $("#paste-status").textContent = "";
+  $("#paste-dialog").showModal();
+  setTimeout(() => $("#paste-text").focus(), 50);
+}
+$("#paste-btn").addEventListener("click", openPasteDialog);
+$("#paste-read").addEventListener("click", async () => {
+  const txt = $("#paste-text").value;
+  if (txt.trim().length < 10) { $("#paste-status").textContent = "Paste the listing text first."; return; }
+  const d = parseListing(txt);
+  const found = [d.addr && "address", d.coldRent && "cold rent", d.rent && "warm rent", d.size && "size", d.rooms && "rooms", d.available && "availability"].filter(Boolean);
+  if (!found.length) { $("#paste-status").textContent = "Couldn't recognise anything. Is this the listing text?"; return; }
+  $("#paste-dialog").close();
+  await importListing(d, `pasted text (found: ${found.join(", ")})`);
+});
+
 // ---------- apartment dialog ----------
 let editing = null;
 function openAptDialog(apt) {
@@ -804,7 +934,7 @@ $("#apt-dialog").addEventListener("close", () => {
   if (editing.id) {
     Object.assign(apts.find((a) => a.id === editing.id), vals, { updatedAt: Date.now() });
   } else {
-    const a = { id: Math.random().toString(36).slice(2, 10), addr: editing.addr, lat: editing.lat, lon: editing.lon, ...vals, createdAt: Date.now(), updatedAt: Date.now() };
+    const a = { id: Math.random().toString(36).slice(2, 10), addr: editing.addr, lat: editing.lat, lon: editing.lon, approx: !!editing.approx, ...vals, createdAt: Date.now(), updatedAt: Date.now() };
     apts.push(a);
     selectedId = a.id;
   }
@@ -1100,7 +1230,7 @@ function renderDetail(a, loading) {
   el.hidden = false;
   const an = a.analysis?.key === analysisKey() ? a.analysis : null;
   const sc = scoreOf(an);
-  const head = `<div class="detail-head"><div><h3>${esc(a.label || "Apartment")}</h3><div class="small muted">${esc(a.addr)}</div></div>
+  const head = `<div class="detail-head"><div><h3>${esc(a.label || "Apartment")}</h3><div class="small muted">${esc(a.addr)}${a.approx ? ' · <span title="The listing did not give the street; distances are approximate.">≈ approximate location</span>' : ""}</div></div>
     <div class="row gap-s">${sc != null ? `<span class="score ${scoreClass(sc)}" style="font-size:16px">${sc}</span>` : ""}
     <button type="button" class="btn ghost small close-detail" title="Close (Esc): hide walking areas" aria-label="Close">✕</button></div></div>`;
   const facts0 = [];
@@ -1471,6 +1601,8 @@ $("#panel-toggle").addEventListener("click", () => {
   if (store.get("heatOn", false)) { $("#heat-toggle").checked = true; setHeat(true); }
   renderSyncBadge();
   Sync.run();
+  const add = readAddLink();
+  if (add) importListing(add, "link");
   if (apts.length) {
     const b = L.latLngBounds(apts.map((a) => [a.lat, a.lon])).extend([settings.workLat, settings.workLon]);
     map.fitBounds(b.pad(0.3), { maxZoom: 15 });

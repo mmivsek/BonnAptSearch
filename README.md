@@ -17,6 +17,10 @@ A web map for apartment hunting in Bonn. Add an apartment and see what's in walk
 - Transport lines: trains/S-Bahn/Stadtbahn and buses; tap a line to highlight it with its stops
 - Neighbourhood heatmap: Bonn coloured by your priorities, to see which districts to search in
 
+**Quick add from a listing**
+- *📋 Paste listing text*: copy the ad text from ImmoScout24, Kleinanzeigen, Immowelt or WG-Gesucht and paste it; address, cold/warm rent, m², rooms and availability are filled in.
+- *Screenshot → Claude → link*: send a listing screenshot to Claude (Claude Code on this repo, or a Claude Project set up with [docs/claude-project-instructions.md](docs/claude-project-instructions.md)); it replies with a link like `…/#add?addr=…&cold=750&size=58` that opens the pre-filled form. `scripts/add_link.py` builds such links.
+
 **Sync** between laptop and phone through a secret GitHub Gist (⋯ → Sync between devices). Without it, apartments stay in the browser; ⋯ → Export/Import also works.
 
 ## Data

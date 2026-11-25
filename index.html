@@ -24,7 +24,10 @@
           <input id="search" type="search" placeholder="Street and number, e.g. Kaiserstraße 20" autocomplete="off" aria-label="Search address">
           <ul id="suggestions" class="suggestions" hidden></ul>
         </div>
-        <button id="pick-on-map" class="btn ghost small" type="button">…or click on the map</button>
+        <div class="row gap-s wrap">
+          <button id="pick-on-map" class="btn ghost small" type="button">…or click on the map</button>
+          <button id="paste-btn" class="btn ghost small" type="button">📋 Paste listing text</button>
+        </div>
       </section>
 
       <section class="block" id="apartments-block">
@@ -113,6 +116,14 @@
         <button value="save" class="btn primary">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="paste-dialog">
+    <h3>Paste a listing</h3>
+    <p class="small muted">On ImmoScout24, Kleinanzeigen, Immowelt or WG-Gesucht: select the ad text (or <i>Select all</i>), copy, and paste it here. Add the listing link too if you like. Address, cold/warm rent, size, rooms and availability are filled in for you to check.</p>
+    <label>Listing text <textarea id="paste-text" rows="9" placeholder="Kaltmiete 750 € · Wohnfläche 58 m² · Zimmer 2 · Kaiserstraße 20, 53113 Bonn …"></textarea></label>
+    <p id="paste-status" class="small" style="color:var(--bad)"></p>
+    <div class="row-end gap-s"><form method="dialog"><button class="btn ghost">Cancel</button></form><button class="btn primary" id="paste-read" type="button">Fill in</button></div>
   </dialog>
 
   <dialog id="sync-dialog">
