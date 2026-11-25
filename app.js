@@ -178,7 +178,7 @@ function poiPopup(cat, p) {
       }
       h += `</table>`;
     } else h += `<div class="small muted" style="margin-top:4px">No direct trains to Köln/Düsseldorf.</div>`;
-    h += `<div class="small muted">Direct regional + long-distance trains. Weekday = Tuesday; "last back" = last direct train from there to this station (night trains included).</div>`;
+    h += `<div class="small muted">${regionalOnly() ? "Regional trains only (RE/RB/S-Bahn)" : "Direct regional + long-distance trains"}. Weekday = Tuesday; "last back" = last direct train from there to this station (night trains included).</div>`;
   }
   const links = [];
   if (p.website) links.push(`<a href="${esc(p.website)}" target="_blank" rel="noopener">Website</a>`);
@@ -332,6 +332,18 @@ let linesOn = { rail: false, bus: false, hideLongDistance: true, ...store.get("l
 // ICE, IC, EC, night trains (NJ/EN), European Sleeper, Flixtrain
 const isLongDistance = (l) => l.mode === "train" && /^(ICE|IC|ECE|EC|NJ|EN|ES|FLX|TGV|RJX?)(\s|\d|$)/i.test(l.ref);
 const lineVisible = (l) => !(linesOn.hideLongDistance && isLongDistance(l));
+const regionalOnly = () => !!linesOn.hideLongDistance;
+// Transitous modes without ICE/IC/EC (Deutschlandticket-compatible)
+const transitModesParam = () => (regionalOnly() ? "&transitModes=TRAM,SUBWAY,BUS,FERRY,REGIONAL_RAIL,REGIONAL_FAST_RAIL,SUBURBAN,METRO" : "");
+// Point each station's direct/lines at the all-trains or regional-only figures.
+function applyTrainMode() {
+  for (const s of DATA.stations) {
+    if (!s.directAll) { s.directAll = s.direct; s.linesAll = s.lines; }
+    const reg = regionalOnly() && s.direct_regional;
+    s.direct = reg ? s.direct_regional : s.directAll;
+    s.lines = reg ? s.lines_regional : s.linesAll;
+  }
+}
 let activeLine = null;
 const MODE_LABEL = { train: "Train", tram: "Stadtbahn / tram", bus: "Bus" };
 
@@ -445,6 +457,12 @@ for (const kind of ["rail", "bus"]) {
     const act = allLines().find((l) => l.id === activeLine);
     if (act && !lineVisible(act)) activeLine = null;
     renderLines();
+    // stations, commute, score and heatmap follow the same setting
+    applyTrainMode();
+    rebuildMarkers("station");
+    renderApts();
+    renderHeat();
+    if (selectedId) selectApt(selectedId, { keepView: true }); else analyzeRest();
   });
 }
 async function initLines() {
@@ -464,10 +482,10 @@ let heatGrid = null;
 const WALK_M_PER_MIN = 80 / 1.3; // straight-line metres per walking minute (80 m/min on streets, 1.3 detour)
 
 async function commuteStops() {
-  const key = `${settings.workLat},${settings.workLon},${settings.arrive}`;
+  const key = `${settings.workLat},${settings.workLon},${settings.arrive},${regionalOnly()}`;
   if (heatStops && heatStopsKey === key) return heatStops;
   const when = nextWeekdayISO(settings.arrive);
-  const d = await getJSON(`https://api.transitous.org/api/v1/one-to-all?one=${settings.workLat},${settings.workLon}&time=${encodeURIComponent(when.iso)}&maxTravelTime=90&arriveBy=true`, {}, 60000);
+  const d = await getJSON(`https://api.transitous.org/api/v1/one-to-all?one=${settings.workLat},${settings.workLon}&time=${encodeURIComponent(when.iso)}&maxTravelTime=90&arriveBy=true${transitModesParam()}`, {}, 60000);
   const best = new Map();
   for (const x of d.all || []) {
     const k = `${x.place.lat.toFixed(4)},${x.place.lon.toFixed(4)}`;
@@ -596,7 +614,7 @@ async function loadData() {
     getJSON("data/gym_prices.json").catch(() => ({ chains: [] })),
   ]);
   DATA.rents = await getJSON("data/rents.json").catch(() => null);
-  if (stations) { DATA.stations = stations.stations; DATA.stationsMeta = stations; }
+  if (stations) { DATA.stations = stations.stations; DATA.stationsMeta = stations; applyTrainMode(); }
   DATA.gymPrices = prices.chains.map((c) => ({ ...c, rx: new RegExp(c.match, "i") }));
 
   let pois = await getJSON("data/pois.json").catch(() => null);
@@ -810,7 +828,7 @@ function saveApts(changed = true) {
 
 // ---------- analysis ----------
 function analysisKey() {
-  return [CFG.analysisVersion, filtersKey(), DATA.poisMeta?.generated, DATA.stationsMeta?.generated, settings.workLat, settings.workLon, settings.arrive].join("|");
+  return [CFG.analysisVersion, filtersKey(), regionalOnly(), DATA.poisMeta?.generated, DATA.stationsMeta?.generated, settings.workLat, settings.workLon, settings.arrive].join("|");
 }
 function nearestByAir(list, lat, lon, n, filter = () => true) {
   return list.filter(filter).map((p) => ({ p, d: haversine(lat, lon, p.lat, p.lon) })).sort((a, b) => a.d - b.d).slice(0, n);
@@ -901,7 +919,7 @@ async function analyze(apt) {
   const when = nextWeekdayISO(settings.arrive);
   res.commute.date = when.date;
   try {
-    const url = `${CFG.transitous}?fromPlace=${lat},${lon}&toPlace=${settings.workLat},${settings.workLon}&time=${encodeURIComponent(when.iso)}&arriveBy=true`;
+    const url = `${CFG.transitous}?fromPlace=${lat},${lon}&toPlace=${settings.workLat},${settings.workLon}&time=${encodeURIComponent(when.iso)}&arriveBy=true${transitModesParam()}`;
     const d = await getJSON(url);
     const its = (d.itineraries || []);
     if (its.length) {
@@ -916,7 +934,7 @@ async function analyze(apt) {
   // 3b) getting home after a Friday night out in Köln (leave Köln Hbf after 00:30 Saturday)
   try {
     const sat = nextWeekdayISO("00:30", 6);
-    const d = await getJSON(`${CFG.transitous}?fromPlace=50.94303,6.958727&toPlace=${lat},${lon}&time=${encodeURIComponent(sat.iso)}`);
+    const d = await getJSON(`${CFG.transitous}?fromPlace=50.94303,6.958727&toPlace=${lat},${lon}&time=${encodeURIComponent(sat.iso)}${transitModesParam()}`);
     const it = (d.itineraries || [])[0];
     if (it) {
       res.night = {

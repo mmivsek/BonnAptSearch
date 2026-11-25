@@ -19,6 +19,7 @@ import csv
 import datetime
 import json
 import math
+import re
 import os
 import sys
 
@@ -59,6 +60,10 @@ def clean(name):
         name = name.replace(suf, "")
     return name.replace("Bonn-", "Bonn ").strip()
 
+
+# Long-distance trains (not covered by the Deutschlandticket).
+LD_RX = re.compile(r"^(ICE|IC|ECE|EC|NJ|EN|ES|FLX|TGV|RJX?)(\s|\d|$)", re.I)
+SKIP_LD = False  # second pass: regional trains only
 
 # Stations merged across feeds by position (within 400 m).
 stations = []  # dicts with name, lat, lon, agg
@@ -154,6 +159,8 @@ def process(feed):
         line = (rt.get("route_short_name") or rt.get("route_long_name") or "?").strip()
         if line[:-1].isdigit() and line.endswith("N"):
             continue  # night-bus replacement services mislabelled as rail
+        if SKIP_LD and (LD_RX.match(line) or rt.get("route_type") in ("101", "102")):
+            continue
         for i, (_, p, dep, _, pick, _) in enumerate(seq):
             if p not in local or pick == "1":
                 continue
@@ -193,6 +200,8 @@ def process(feed):
             line = (rt.get("route_short_name") or "").strip()
             if line[:-1].isdigit() and line.endswith("N"):
                 continue
+            if SKIP_LD and (LD_RX.match(line) or rt.get("route_type") in ("101", "102")):
+                continue
             for i, (_, p, dep, _, pick, _) in enumerate(seq):
                 if pick == "1":
                     continue
@@ -219,12 +228,7 @@ def process(feed):
     return day
 
 
-days = [process(f) for f in FEEDS]
-
-out = []
-for s in stations:
-    if s["departures"] == 0:
-        continue
+def summarize(s):
     direct = {k: {"label": TARGETS[k][0], "trips_per_day": t["trips"], "fastest_min": t["fastest"],
                   "lines": sorted(t["lines"]), "first": t["first"], "last": t["last"]}
               for k, t in s["to"].items() if t["trips"]}
@@ -234,15 +238,43 @@ for s in stations:
             direct[k][key] = {"trips": w["trips"], "last": w["last"]} if w else {"trips": 0, "last": None}
         direct[k]["back"] = {key: dict(s["back"][key][k]) for key in ("wd", "fri", "sat", "sun")
                              if key in s["back"] and k in s["back"][key]}
+    return direct
+
+
+days = [process(f) for f in FEEDS]
+all_stations = stations
+# Second pass with regional trains only (RE/RB/S-Bahn), for Deutschlandticket users.
+stations = []
+SKIP_LD = True
+for f in FEEDS:
+    process(f)
+reg_stations = stations
+
+
+def regional_twin(s):
+    for r in reg_stations:
+        if dist_m((r["lat"], r["lon"]), (s["lat"], s["lon"])) < 400:
+            return r
+    return None
+
+
+out = []
+for s in all_stations:
+    if s["departures"] == 0:
+        continue
+    r = regional_twin(s)
     out.append({"name": s["name"], "lat": round(s["lat"], 6), "lon": round(s["lon"], 6),
-                "departures_per_day": s["departures"], "lines": sorted(s["lines"]), "direct": direct})
+                "departures_per_day": s["departures"], "lines": sorted(s["lines"]), "direct": summarize(s),
+                "departures_per_day_regional": r["departures"] if r else 0,
+                "lines_regional": sorted(r["lines"]) if r else [],
+                "direct_regional": summarize(r) if r else {}})
 out.sort(key=lambda s: -s["departures_per_day"])
 
 res = {
     "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
     "sample_days": sorted({d.isoformat() for d in days}),
     "source": "gtfs.de (regional + long-distance), data by DELFI e.V., CC BY 4.0",
-    "note": "trips_per_day/first/last: Tuesday, trains FROM the station TO the target. sat/sun: same on the weekend. back.*: trains FROM the target TO the station (wd=Tue, fri=Friday incl. after midnight, sat, sun); times after midnight are shown as 24:xx/25:xx.",
+    "note": "trips_per_day/first/last: Tuesday, trains FROM the station TO the target. sat/sun: same on the weekend. back.*: trains FROM the target TO the station (wd=Tue, fri=Friday incl. after midnight, sat, sun); times after midnight are shown as 24:xx/25:xx. *_regional: the same without long-distance trains (ICE/IC/EC/night trains).",
     "stations": out,
 }
 dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "stations.json")
