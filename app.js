@@ -17,7 +17,7 @@ const CFG = {
   valhalla: "https://valhalla1.openstreetmap.de",
   transitous: "https://api.transitous.org/api/v5/plan",
   overpass: ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"],
-  analysisVersion: 3,
+  analysisVersion: 4,
 };
 
 const DEFAULT_SETTINGS = {
@@ -562,6 +562,7 @@ async function loadData() {
     getJSON("data/stations.json").catch(() => null),
     getJSON("data/gym_prices.json").catch(() => ({ chains: [] })),
   ]);
+  DATA.rents = await getJSON("data/rents.json").catch(() => null);
   if (stations) { DATA.stations = stations.stations; DATA.stationsMeta = stations; }
   DATA.gymPrices = prices.chains.map((c) => ({ ...c, rx: new RegExp(c.match, "i") }));
 
@@ -735,7 +736,7 @@ function openAptDialog(apt) {
   const f = $("#apt-form");
   $("#apt-dialog-title").textContent = apt.id ? "Edit apartment" : "New apartment";
   $("#apt-dialog-addr").textContent = apt.addr;
-  for (const k of ["label", "rent", "size", "rooms", "available", "url", "notes"]) f.elements[k].value = apt[k] ?? "";
+  for (const k of ["label", "coldRent", "rent", "size", "rooms", "available", "url", "notes"]) f.elements[k].value = apt[k] ?? "";
   $("#apt-delete").hidden = !apt.id;
   $("#apt-dialog").showModal();
 }
@@ -743,8 +744,8 @@ $("#apt-dialog").addEventListener("close", () => {
   if ($("#apt-dialog").returnValue !== "save" || !editing) return;
   const f = $("#apt-form");
   const vals = {};
-  for (const k of ["label", "rent", "size", "rooms", "available", "url", "notes"]) vals[k] = f.elements[k].value.trim();
-  for (const k of ["rent", "size", "rooms"]) vals[k] = vals[k] === "" ? null : Number(vals[k]);
+  for (const k of ["label", "coldRent", "rent", "size", "rooms", "available", "url", "notes"]) vals[k] = f.elements[k].value.trim();
+  for (const k of ["coldRent", "rent", "size", "rooms"]) vals[k] = vals[k] === "" ? null : Number(vals[k]);
   if (editing.id) {
     Object.assign(apts.find((a) => a.id === editing.id), vals, { updatedAt: Date.now() });
   } else {
@@ -847,6 +848,13 @@ async function analyze(apt) {
     res.nearest[g.key] = best;
   }
 
+  // 2b) which Stadtteil is this? (for rent comparison)
+  try {
+    const r = await getJSON(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`, { headers: { "Accept-Language": "de" } }, 10000);
+    const ad = r.address || {};
+    res.area = { suburb: ad.suburb || ad.quarter || null, district: ad.city_district || ad.borough || null, quarter: ad.quarter || null };
+  } catch (e) { res.area = null; }
+
   // 3) commute to work: public transport, bike, walk
   res.commute = {};
   const when = nextWeekdayISO(settings.arrive);
@@ -892,6 +900,28 @@ function scoreOf(an) {
 }
 const scoreClass = (s) => (s == null ? "" : s >= 70 ? "good" : s >= 45 ? "ok" : "bad");
 
+// ---------- rent check ----------
+// Cold rent per m² (entered, or estimated from warm rent) vs typical asking rents of the area.
+function rentCheck(a, area) {
+  const R = DATA.rents;
+  if (!R || !a.size) return null;
+  let cold = a.coldRent, estimated = false;
+  if (!cold && a.rent) { cold = a.rent - R.utilities_eur_m2 * a.size; estimated = true; }
+  if (!cold || cold <= 0) return null;
+  const sqm = cold / a.size;
+  const norm = (s) => (s || "").toLowerCase().replace(/[^a-zäöüß]/g, "");
+  const find = (name) => name && Object.entries(R.areas).find(([k]) => norm(k) === norm(name) || norm(name).includes(norm(k)));
+  let hit = null;
+  for (const n of [area?.quarter, area?.suburb, area?.district]) { hit = find(n); if (hit) break; }
+  const [areaName, vals] = hit || ["Bonn (city average)", R.bonn];
+  const vs = vals.map((x) => x.v);
+  const lo = Math.min(...vs), hi = Math.max(...vs);
+  const verdict = sqm < lo * 0.92 ? "cheap" : sqm > hi * 1.08 ? "expensive" : "typical";
+  const srcs = [...new Set(vals.map((x) => x.s))].map((s) => R.sources[s]);
+  return { sqm, cold, estimated, areaName, lo, hi, verdict, srcs, matched: !!hit, suburb: area?.suburb };
+}
+const VERDICT = { cheap: ["good", "Below typical"], typical: ["ok", "Typical"], expensive: ["bad", "Above typical"] };
+
 // ---------- rendering ----------
 function renderApts() {
   const ul = $("#apt-list");
@@ -903,7 +933,7 @@ function renderApts() {
     const sc = a.analysis?.key === analysisKey() ? scoreOf(a.analysis) : null;
     const li = document.createElement("li");
     li.className = `apt${a.id === selectedId ? " selected" : ""}`;
-    const meta = [a.rent ? eur(a.rent) : "", a.size ? `${a.size} m²` : "", a.rooms ? `${a.rooms} Zi.` : "", a.rent && a.size ? `${(a.rent / a.size).toFixed(1)} €/m²` : ""].filter(Boolean).join(" · ");
+    const meta = [a.rent ? eur(a.rent) : a.coldRent ? `${eur(a.coldRent)} kalt` : "", a.size ? `${a.size} m²` : "", a.rooms ? `${a.rooms} Zi.` : "", a.rent && a.size ? `${(a.rent / a.size).toFixed(1)} €/m²` : ""].filter(Boolean).join(" · ");
     li.innerHTML = `<span class="num">${i + 1}</span><span class="title">${esc(a.label || a.addr)}</span>
       <span class="score ${scoreClass(sc)}" title="Score 0–100 based on your priorities">${sc ?? "…"}</span>
       <span class="meta">${esc(meta || a.addr)}</span>`;
@@ -990,7 +1020,16 @@ function renderDetail(a, loading) {
     ${sc != null ? `<span class="score ${scoreClass(sc)}" style="font-size:16px">${sc}</span>` : ""}</div>`;
   const facts0 = [];
   if (a.rent || a.size || a.rooms) {
-    facts0.push(fact("💶", "Rent", a.rent ? eur(a.rent) : "–", "", [a.size ? `${a.size} m²` : "", a.rooms ? `${a.rooms} rooms` : "", a.rent && a.size ? `${(a.rent / a.size).toFixed(2)} €/m²` : "", a.available ? `from ${esc(a.available)}` : ""].filter(Boolean).join(" · ")));
+    facts0.push(fact("💶", "Rent", a.rent ? `${eur(a.rent)} warm` : a.coldRent ? `${eur(a.coldRent)} cold` : "–", "", [a.coldRent && a.rent ? `${eur(a.coldRent)} cold` : "", a.size ? `${a.size} m²` : "", a.rooms ? `${a.rooms} rooms` : "", a.rent && a.size ? `${(a.rent / a.size).toFixed(2)} €/m²` : "", a.available ? `from ${esc(a.available)}` : ""].filter(Boolean).join(" · ")));
+  }
+  const rc = an ? rentCheck(a, an.area) : null;
+  if (rc) {
+    const [cls, word] = VERDICT[rc.verdict];
+    facts0.push(fact("📊", `Rent check: ${word}`, `${rc.sqm.toFixed(2)} €/m²`, cls,
+      `Cold rent${rc.estimated ? " (estimated: warm − ~" + DATA.rents.utilities_eur_m2 + " €/m² utilities)" : ""} vs. typical asking rents in ${esc(rc.areaName)}: ${rc.lo.toFixed(2)}${rc.hi !== rc.lo ? "–" + rc.hi.toFixed(2) : ""} €/m²` +
+      `${!rc.matched && rc.suburb ? ` (no data for ${esc(rc.suburb)})` : ""}<br>Sources: ${rc.srcs.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join(", ")} · <a href="${esc(DATA.rents.official.url)}" target="_blank" rel="noopener">official Mietspiegel</a>`));
+  } else if (an?.area?.suburb) {
+    facts0.push(fact("📍", `Stadtteil: ${esc(an.area.suburb)}`, "", "", a.size ? "Add the rent to compare it with the area." : "Add size (m²) and rent to compare with typical rents."));
   }
   if (loading || !an) {
     el.innerHTML = `${head}<ul class="facts">${facts0.join("")}</ul><p class="small muted"><span class="spinner"></span> Calculating walking areas, distances and commute…</p>`;
@@ -1063,6 +1102,7 @@ $("#compare-btn").addEventListener("click", () => {
     const an = a.analysis?.key === analysisKey() ? a.analysis : null;
     const n = an?.nearest || {};
     return {
+      rc: an ? rentCheck(a, an.area) : null, coldSqm: an ? rentCheck(a, an.area)?.sqm : null,
       i: i + 1, a, score: scoreOf(an), rent: a.rent, size: a.size, sqm: a.rent && a.size ? a.rent / a.size : null,
       disc: n.discounter?.sec, gym: n.gym?.sec, gymPrice: n.gym?.price?.monthly_eur, station: n.stationKoeln?.sec, stationName: n.stationKoeln?.name,
       transit: an?.commute?.transit?.sec, bike: an?.commute?.bike?.sec,
@@ -1071,7 +1111,7 @@ $("#compare-btn").addEventListener("click", () => {
   });
   const cols = [
     ["#", (r) => r.i], ["Apartment", (r) => esc(r.a.label || r.a.addr)], ["Score", (r) => r.score ?? "–", "score", "max"],
-    ["Rent", (r) => eur(r.rent), "rent", "min"], ["m²", (r) => r.size ?? "", "size", "max"], ["€/m²", (r) => (r.sqm ? r.sqm.toFixed(1) : ""), "sqm", "min"],
+    ["Rent", (r) => eur(r.rent), "rent", "min"], ["Cold €/m²", (r) => (r.rc ? `${r.rc.sqm.toFixed(1)} <span class="val ${VERDICT[r.rc.verdict][0]}">${VERDICT[r.rc.verdict][1].toLowerCase()}</span>` : "–"), "coldSqm", "min"], ["m²", (r) => r.size ?? "", "size", "max"], ["Warm €/m²", (r) => (r.sqm ? r.sqm.toFixed(1) : ""), "sqm", "min"],
     ["🛒 Discounter", (r) => fmtMin(r.disc), "disc", "min"], ["🛒 in 10 min", (r) => r.discCount ?? "–", "discCount", "max"],
     ["🏋️ Gym", (r) => fmtMin(r.gym), "gym", "min"], ["🏋️ €/mo", (r) => eur(r.gymPrice), "gymPrice", "min"],
     ["🚆 Station→Köln", (r) => (r.station != null ? `${fmtMin(r.station)} <span class="muted">${esc(r.stationName)}</span>` : "–"), "station", "min"],

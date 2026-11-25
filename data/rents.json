@@ -1,0 +1,25 @@
+{
+ "_readme": "Typical ASKING rents (Kaltmiete, €/m²) for new listings, by Stadtteil / Stadtbezirk. Values from different portals disagree by up to ~2 €/m², so each area keeps all values and the app shows the range. Not the official Mietspiegel (that is for existing contracts and much lower). Keys are matched against OSM suburb / city_district names.",
+ "checked": "2026-11",
+ "utilities_eur_m2": 3.0,
+ "sources": {
+  "is24": {"label": "ImmoScout24, Q2 2026", "url": "https://www.immobilienscout24.de/immobilienpreise/nordrhein-westfalen/bonn/mietspiegel"},
+  "immoportal": {"label": "Immoportal, 2026", "url": "https://www.immoportal.com/mietspiegel/bonn"},
+  "mietcheck": {"label": "miet-check.de, 2026", "url": "https://www.miet-check.de/mietspiegel/bonn/"}
+ },
+ "official": {"label": "Bonn Mietspiegel 2026 (official, existing contracts) with online calculator", "url": "https://www.bonn.de/themen-entdecken/soziales-gesellschaft/mietspiegel-2026.php"},
+ "bonn": [{"v": 12.13, "s": "is24"}, {"v": 12.43, "s": "is24"}, {"v": 14.02, "s": "mietcheck"}],
+ "areas": {
+  "Südstadt": [{"v": 13.50, "s": "is24"}, {"v": 14.06, "s": "immoportal"}],
+  "Poppelsdorf": [{"v": 14.24, "s": "immoportal"}],
+  "Kessenich": [{"v": 14.16, "s": "immoportal"}],
+  "Endenich": [{"v": 14.06, "s": "immoportal"}, {"v": 14.53, "s": "mietcheck"}],
+  "Gronau": [{"v": 15.05, "s": "mietcheck"}],
+  "Dransdorf": [{"v": 14.54, "s": "mietcheck"}],
+  "Beuel-Mitte": [{"v": 13.90, "s": "immoportal"}],
+  "Godesberg-Nord": [{"v": 13.91, "s": "immoportal"}],
+  "Alt-Godesberg": [{"v": 13.39, "s": "immoportal"}],
+  "Bad Godesberg": [{"v": 11.85, "s": "is24"}, {"v": 12.14, "s": "is24"}],
+  "Beuel": [{"v": 11.70, "s": "is24"}, {"v": 12.04, "s": "is24"}]
+ }
+}
