@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Build data/pois.json from OpenStreetMap via the Overpass API.
+"""Build data/pois.json from OpenStreetMap.
 
 Categories: discount stores, other supermarkets, gyms, pharmacies and
 Stadtbahn/tram stops. Gym prices are NOT added here: the web app matches gyms
 against data/gym_prices.json at load time, so price edits need no rebuild.
 
-Usage: python3 scripts/build_pois.py
-Stdlib only, so it runs as-is in GitHub Actions.
+Usage:
+  python3 scripts/build_pois.py --pbf koeln-regbez-latest.osm.pbf   # Geofabrik extract (needs: pip install osmium)
+  python3 scripts/build_pois.py                                     # Overpass API (stdlib only)
+
+The GitHub Action uses the Geofabrik extract: it is updated daily and, unlike
+the shared Overpass servers, does not time out or rate-limit.
 """
 import datetime
 import json
@@ -42,14 +46,59 @@ DISCOUNTERS = re.compile(r"\b(aldi|lidl|penny|netto|norma)\b", re.I)
 UA = "BonnAptSearch/1.0 (personal apartment-search map; github.com/mmivsek/bonnaptsearch)"
 
 
+def wanted(t, is_node):
+    """Same selection as QUERY, for elements read from a .pbf file."""
+    if t.get("shop") in ("supermarket", "discount"):
+        return True
+    if t.get("leisure") == "fitness_centre" or t.get("amenity") in ("gym", "pharmacy"):
+        return True
+    if t.get("leisure") == "sports_centre" and "fitness" in t.get("sport", ""):
+        return True
+    if is_node and (t.get("railway") == "tram_stop" or
+                    (t.get("railway") in ("station", "halt") and t.get("station") in ("light_rail", "subway"))):
+        return True
+    return False
+
+
+def read_pbf(path):
+    import osmium  # pip install osmium
+
+    s, w, n, e = map(float, BBOX.split(","))
+    out = []
+
+    class H(osmium.SimpleHandler):
+        def node(self, o):
+            t = dict(o.tags)
+            if t and wanted(t, True) and o.location.valid():
+                lat, lon = o.location.lat, o.location.lon
+                if s <= lat <= n and w <= lon <= e:
+                    out.append({"type": "node", "id": o.id, "lat": lat, "lon": lon, "tags": t})
+
+        def way(self, o):
+            t = dict(o.tags)
+            if not t or not wanted(t, False):
+                return
+            pts = [(nd.lat, nd.lon) for nd in o.nodes if nd.location.valid()]
+            if not pts:
+                return
+            lat = sum(p[0] for p in pts) / len(pts)
+            lon = sum(p[1] for p in pts) / len(pts)
+            if s <= lat <= n and w <= lon <= e:
+                out.append({"type": "way", "id": o.id, "center": {"lat": lat, "lon": lon}, "tags": t})
+
+    H().apply_file(path, locations=True)
+    print(f"read {len(out)} elements from {path}")
+    return out
+
+
 def fetch():
     body = urllib.parse.urlencode({"data": QUERY}).encode()
     last = None
-    for attempt in range(3):
+    for attempt in range(2):
         for url in ENDPOINTS:
             try:
                 req = urllib.request.Request(url, data=body, headers={"User-Agent": UA})
-                with urllib.request.urlopen(req, timeout=240) as r:
+                with urllib.request.urlopen(req, timeout=120) as r:
                     data = json.load(r)
                 print(f"fetched {len(data['elements'])} elements from {url}")
                 return data["elements"]
@@ -78,9 +127,16 @@ def category(t):
 
 
 def main():
+    if "--pbf" in sys.argv:
+        elements = read_pbf(sys.argv[sys.argv.index("--pbf") + 1])
+        source = "© OpenStreetMap contributors (ODbL), Geofabrik extract"
+    else:
+        elements = fetch()
+        source = "© OpenStreetMap contributors (ODbL), via Overpass API"
+
     out = {k: [] for k in ("discounter", "supermarket", "gym", "pharmacy", "tram")}
     seen_tram = set()
-    for el in fetch():
+    for el in elements:
         t = el.get("tags", {})
         lat = el.get("lat") or el.get("center", {}).get("lat")
         lon = el.get("lon") or el.get("center", {}).get("lon")
@@ -112,7 +168,7 @@ def main():
     for v in out.values():
         v.sort(key=lambda p: p["name"])
     res = {"generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
-           "source": "© OpenStreetMap contributors (ODbL), via Overpass API",
+           "source": source,
            "bbox": BBOX, "categories": out}
     with open(os.path.join(ROOT, "data", "pois.json"), "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, separators=(",", ":"))

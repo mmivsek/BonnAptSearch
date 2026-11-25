@@ -26,8 +26,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: POIs from OpenStreetMap (Overpass)
-        run: python3 scripts/build_pois.py
+      - name: POIs from OpenStreetMap (Geofabrik extract, Overpass as fallback)
+        timeout-minutes: 20
+        run: |
+          pip install --quiet osmium
+          if curl -fsSL --retry 3 -o /tmp/koeln.osm.pbf \
+               https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-latest.osm.pbf; then
+            python3 scripts/build_pois.py --pbf /tmp/koeln.osm.pbf
+          else
+            python3 scripts/build_pois.py
+          fi
 
       - name: Download GTFS timetables (gtfs.de / DELFI)
         run: |

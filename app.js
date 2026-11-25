@@ -62,7 +62,11 @@ function haversine(aLat, aLon, bLat, bLon) {
 }
 const fmtMin = (s) => (s == null ? "–" : `${Math.max(1, Math.round(s / 60))} min`);
 const fmtDist = (m) => (m == null ? "" : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
-const eur = (n) => (n == null || n === "" ? "" : `${Number(n).toLocaleString("de-DE", { maximumFractionDigits: 2 })} €`);
+const eur = (n) => {
+  if (n == null || n === "") return "";
+  const v = Number(n);
+  return `${v.toLocaleString("de-DE", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 })} €`;
+};
 function grade(min, good, bad) {
   if (min == null) return "bad";
   return min <= good ? "good" : min <= (good + bad) / 2 ? "ok" : "bad";
@@ -311,9 +315,26 @@ function photonLabel(f) {
 }
 async function geocode(q, limit = 6) {
   const b = CFG.bbox;
-  const url = `${CFG.photon}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de&lat=${CFG.center[0]}&lon=${CFG.center[1]}&bbox=${b.w - 0.1},${b.s - 0.1},${b.e + 0.1},${b.n + 0.1}`;
-  const d = await getJSON(url);
-  return d.features;
+  const box = [b.w - 0.1, b.s - 0.1, b.e + 0.1, b.n + 0.1].map((x) => x.toFixed(2));
+  try {
+    const url = `${CFG.photon}?q=${encodeURIComponent(q)}&limit=${limit}&lang=de&lat=${CFG.center[0]}&lon=${CFG.center[1]}&bbox=${box.join(",")}`;
+    return (await getJSON(url, {}, 8000)).features;
+  } catch (e) {
+    // Fallback: Nominatim (OSM's own geocoder), converted to Photon-like features.
+    console.warn("Photon failed, using Nominatim", e);
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=${limit}&countrycodes=de&viewbox=${box[0]},${box[3]},${box[2]},${box[1]}&q=${encodeURIComponent(q)}`;
+    const d = await getJSON(url, { headers: { "Accept-Language": "de" } });
+    return d.map((r) => {
+      const a = r.address || {};
+      return {
+        geometry: { coordinates: [Number(r.lon), Number(r.lat)] },
+        properties: {
+          name: r.name && r.name !== a.road ? r.name : undefined, street: a.road, housenumber: a.house_number, postcode: a.postcode,
+          city: a.city || a.town || a.village, district: a.suburb || a.city_district,
+        },
+      };
+    });
+  }
 }
 $("#search").addEventListener("input", (e) => {
   clearTimeout(searchTimer);
@@ -583,6 +604,23 @@ async function selectApt(id) {
   }
   renderDetail(a, false);
   drawAnalysis(a);
+  const outer = a.analysis?.iso?.find((f) => f.min === 15);
+  if (outer) map.fitBounds(L.geoJSON(outer.geometry).getBounds().pad(0.15), { maxZoom: 16 });
+  if (matchMedia("(max-width: 760px)").matches) $("#detail").scrollIntoView({ block: "start", behavior: "smooth" });
+  analyzeRest();
+}
+
+// Analyse other apartments one by one in the background so scores/compare are complete.
+let restRunning = false;
+async function analyzeRest() {
+  if (restRunning) return;
+  restRunning = true;
+  try {
+    for (const a of apts) {
+      if (a.analysis?.key === analysisKey()) continue;
+      try { a.analysis = await analyze(a); saveApts(); renderApts(); } catch (e) { console.warn("background analysis", e); }
+    }
+  } finally { restRunning = false; }
 }
 
 function drawAnalysis(a) {
@@ -685,6 +723,7 @@ function renderDetail(a, loading) {
 // ---------- compare ----------
 $("#compare-btn").addEventListener("click", () => {
   if (!apts.length) { toast("Add some apartments first."); return; }
+  if (apts.some((a) => a.analysis?.key !== analysisKey())) toast("Some apartments are still being analysed. Reopen in a moment.");
   const rows = apts.map((a, i) => {
     const an = a.analysis?.key === analysisKey() ? a.analysis : null;
     const n = an?.nearest || {};
@@ -796,5 +835,6 @@ $("#panel-toggle").addEventListener("click", () => {
   if (apts.length) {
     const b = L.latLngBounds(apts.map((a) => [a.lat, a.lon])).extend([settings.workLat, settings.workLon]);
     map.fitBounds(b.pad(0.3), { maxZoom: 15 });
+    analyzeRest();
   }
 })();
