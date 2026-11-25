@@ -1,0 +1,15 @@
+{
+ "_readme": "Hand-curated gym prices (OSM has none). 'match' is a case-insensitive regex tested against the gym's brand + name. Prices are the cheapest advertised plan; always verify on the gym's website. Update 'checked' when you re-verify.",
+ "chains": [
+  {"chain": "FitX", "match": "fit ?x", "monthly_eur": 29.0, "joining_fee_eur": 29.0, "min_term_months": 12, "website": "https://www.fitx.de", "note": "≈31.42 €/month effective incl. fees", "source": "https://fair-for-fitness.de/studio/fitx-bonn-duisdorf", "checked": "2026-11"},
+  {"chain": "McFit", "match": "mc ?fit", "monthly_eur": 29.9, "joining_fee_eur": 39.9, "min_term_months": 12, "website": "https://www.mcfit.com", "note": "≈30.65 €/month effective", "source": "https://www.fitness-preisvergleich.de/fitnessstudios/bonn", "checked": "2026-11"},
+  {"chain": "clever fit", "match": "clever ?fit", "monthly_eur": 29.9, "min_term_months": 24, "website": "https://www.clever-fit.com", "note": "Prices vary per studio (Bonn-West ≈32.90 €)", "source": "https://www.fitness-preisvergleich.de/fitnessstudios/bonn", "checked": "2026-11"},
+  {"chain": "AI Fitness", "match": "ai ?fitness", "monthly_eur": 34.95, "min_term_months": 12, "website": "https://www.ai-fitness.de", "note": "≈36.91 €/month effective incl. fees", "source": "https://fair-for-fitness.de/studio/aifitness-bonn-auguststrasse", "checked": "2026-11"},
+  {"chain": "XTRAFIT", "match": "xtra ?fit", "monthly_eur": 29.0, "joining_fee_eur": 30.0, "min_term_months": 12, "website": "https://www.xtrafit.de", "note": "Basic plan; offer may have changed", "source": "https://fragfitty.de/gym/xtrafit-bonn-zentrum/preise", "checked": "2026-11"},
+  {"chain": "all inclusive Fitness", "match": "all ?inclusive", "monthly_eur": 28.27, "website": "https://www.allinclusive-fitness.de", "note": "Effective monthly price per comparison portal", "source": "https://www.fitradar.de/en/bonn", "checked": "2026-11"},
+  {"chain": "Five Star Fitness", "match": "five ?star", "monthly_eur": 19.99, "joining_fee_eur": 19.0, "min_term_months": 24, "note": "", "source": "https://www.fitness-preisvergleich.de/fitnessstudios/bonn", "checked": "2026-11"},
+  {"chain": "John Reed", "match": "john ?reed", "monthly_eur": 46.67, "website": "https://johnreed.fitness", "note": "'from' price per comparison portal", "source": "https://www.fitradar.de/en/bonn", "checked": "2026-11"},
+  {"chain": "Fitness First", "match": "fitness ?first", "monthly_eur": 68.9, "website": "https://www.fitnessfirst.de", "note": "'from' price per comparison portal", "source": "https://www.fitradar.de/en/bonn", "checked": "2026-11"},
+  {"chain": "Kieser", "match": "kieser", "monthly_eur": 81.42, "website": "https://www.kieser.com", "note": "'from' price per comparison portal", "source": "https://www.fitradar.de/en/bonn", "checked": "2026-11"}
+ ]
+}

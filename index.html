@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bonn Apartment Map</title>
+  <meta name="description" content="Compare apartments in Bonn by walking distance to discounters, gyms, train stations and commute time.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="panel" aria-label="Controls">
+      <button id="panel-toggle" class="panel-handle" aria-label="Expand or collapse panel"></button>
+      <header class="panel-head">
+        <h1>Bonn Apartment Map</h1>
+        <p class="sub">Add an address to see what's in walking distance and how long the commute is.</p>
+      </header>
+
+      <section class="block">
+        <h2>Add apartment</h2>
+        <div class="search">
+          <input id="search" type="search" placeholder="Street and number, e.g. Kaiserstraße 20" autocomplete="off" aria-label="Search address">
+          <ul id="suggestions" class="suggestions" hidden></ul>
+        </div>
+        <button id="pick-on-map" class="btn ghost small" type="button">…or click on the map</button>
+      </section>
+
+      <section class="block" id="apartments-block">
+        <div class="row-between">
+          <h2>Apartments <span id="apt-count" class="muted"></span></h2>
+          <div class="row gap-s">
+            <button id="compare-btn" class="btn ghost small" type="button">Compare</button>
+            <button id="menu-btn" class="btn ghost small" type="button" aria-haspopup="true">⋯</button>
+          </div>
+        </div>
+        <div id="menu" class="menu" hidden>
+          <button type="button" data-action="export">Export apartments (JSON)</button>
+          <button type="button" data-action="import">Import apartments…</button>
+          <button type="button" data-action="settings">Settings (work place, arrival time)</button>
+          <input id="import-file" type="file" accept="application/json" hidden>
+        </div>
+        <p id="no-apts" class="muted small">No apartments yet. Search an address above.</p>
+        <ul id="apt-list" class="apt-list"></ul>
+      </section>
+
+      <section class="block" id="detail" hidden></section>
+
+      <section class="block">
+        <h2>Map layers</h2>
+        <div id="layers" class="layers"></div>
+        <label class="check iso-toggle"><input type="checkbox" id="iso-toggle" checked> Walking areas (5 / 10 / 15 min)</label>
+      </section>
+
+      <footer class="block foot small muted" id="data-info"></footer>
+    </aside>
+
+    <main id="map" aria-label="Map"></main>
+  </div>
+
+  <dialog id="apt-dialog">
+    <form method="dialog" id="apt-form">
+      <h3 id="apt-dialog-title">Apartment</h3>
+      <p id="apt-dialog-addr" class="muted small"></p>
+      <label>Name <input name="label" required maxlength="60" placeholder="e.g. Südstadt 2-Zi"></label>
+      <div class="grid2">
+        <label>Rent € (warm) <input name="rent" type="number" min="0" step="1" inputmode="numeric"></label>
+        <label>Size m² <input name="size" type="number" min="0" step="0.5" inputmode="decimal"></label>
+        <label>Rooms <input name="rooms" type="number" min="0" step="0.5" inputmode="decimal"></label>
+        <label>Available from <input name="available" type="text" placeholder="01.02."></label>
+      </div>
+      <label>Listing link <input name="url" type="url" placeholder="https://www.immobilienscout24.de/…"></label>
+      <label>Notes <textarea name="notes" rows="2"></textarea></label>
+      <div class="row-between">
+        <button type="button" class="btn danger ghost" id="apt-delete">Delete</button>
+        <div class="row gap-s">
+          <button value="cancel" formnovalidate class="btn ghost">Cancel</button>
+          <button value="save" class="btn primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <h3>Settings</h3>
+      <label>Work place (name) <input name="workName" required></label>
+      <label>Work address <input name="workAddr" required></label>
+      <p class="muted small">The address is geocoded when you save.</p>
+      <label>Arrive at work by <input name="arrive" type="time" required></label>
+      <fieldset>
+        <legend>Importance (0 = ignore, 3 = must-have)</legend>
+        <div class="grid2" id="weights"></div>
+      </fieldset>
+      <div class="row-end gap-s">
+        <button value="cancel" formnovalidate class="btn ghost">Cancel</button>
+        <button value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="compare-dialog" class="wide">
+    <div class="row-between"><h3>Compare apartments</h3><form method="dialog"><button class="btn ghost small">Close</button></form></div>
+    <div class="table-wrap"><table id="compare-table"></table></div>
+    <p class="muted small">Times are walking minutes unless noted. Commute = public transport, arriving by your set time on a weekday.</p>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1004 @@
+{
+ "generated": "2026-11-25T09:29Z",
+ "sample_days": [
+  "2026-12-15"
+ ],
+ "source": "gtfs.de (regional + long-distance), data by DELFI e.V., CC BY 4.0",
+ "note": "Counts are for one weekday (a Tuesday) and only for trains FROM the station TO the target.",
+ "stations": [
+  {
+   "name": "Troisdorf",
+   "lat": 50.813908,
+   "lon": 7.150877,
+   "departures_per_day": 322,
+   "lines": [
+    "RB27",
+    "RE8",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 161,
+     "fastest_min": 22,
+     "lines": [
+      "RB27",
+      "RE8",
+      "S12",
+      "S19"
+     ],
+     "first": "00:12",
+     "last": "24:03"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 161,
+     "fastest_min": 17,
+     "lines": [
+      "RB27",
+      "RE8",
+      "S12",
+      "S19"
+     ],
+     "first": "00:12",
+     "last": "24:03"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 83,
+     "fastest_min": 8,
+     "lines": [
+      "RB27",
+      "S19"
+     ],
+     "first": "00:12",
+     "last": "23:42"
+    }
+   }
+  },
+  {
+   "name": "Bonn Hbf",
+   "lat": 50.732006,
+   "lon": 7.097131,
+   "departures_per_day": 262,
+   "lines": [
+    "IC 35",
+    "IC 55",
+    "ICE 1",
+    "ICE 19",
+    "ICE 33",
+    "ICE 42",
+    "ICE 55",
+    "ICE 91",
+    "RB26",
+    "RB30",
+    "RB48",
+    "RE1",
+    "RE5",
+    "S23"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 104,
+     "fastest_min": 20,
+     "lines": [
+      "IC 35",
+      "IC 55",
+      "ICE 1",
+      "ICE 19",
+      "ICE 33",
+      "ICE 42",
+      "ICE 55",
+      "ICE 91",
+      "RB26",
+      "RB48",
+      "RE1",
+      "RE5"
+     ],
+     "first": "03:33",
+     "last": "26:33"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 75,
+     "fastest_min": 30,
+     "lines": [
+      "RB26",
+      "RB48",
+      "RE5"
+     ],
+     "first": "03:33",
+     "last": "26:33"
+    },
+    "duesseldorf": {
+     "label": "Düsseldorf Hbf",
+     "trips_per_day": 30,
+     "fastest_min": 46,
+     "lines": [
+      "IC 35",
+      "ICE 1",
+      "ICE 33",
+      "ICE 42",
+      "ICE 55",
+      "ICE 91",
+      "RE1",
+      "RE5"
+     ],
+     "first": "06:04",
+     "last": "25:38"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 7,
+     "fastest_min": 46,
+     "lines": [
+      "RB26"
+     ],
+     "first": "03:33",
+     "last": "26:33"
+    }
+   }
+  },
+  {
+   "name": "Troisdorf Spich",
+   "lat": 50.826717,
+   "lon": 7.1149,
+   "departures_per_day": 248,
+   "lines": [
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 124,
+     "fastest_min": 23,
+     "lines": [
+      "S12",
+      "S19"
+     ],
+     "first": "00:15",
+     "last": "24:06"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 124,
+     "fastest_min": 20,
+     "lines": [
+      "S12",
+      "S19"
+     ],
+     "first": "00:15",
+     "last": "24:06"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 65,
+     "fastest_min": 7,
+     "lines": [
+      "S19"
+     ],
+     "first": "00:15",
+     "last": "23:45"
+    }
+   }
+  },
+  {
+   "name": "Siegburg",
+   "lat": 50.793903,
+   "lon": 7.203006,
+   "departures_per_day": 238,
+   "lines": [
+    "ICE 40",
+    "ICE 41",
+    "ICE 42",
+    "ICE 43",
+    "ICE 45",
+    "ICE 47",
+    "ICE 49",
+    "ICE 62",
+    "ICE 78",
+    "ICE 79",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 104,
+     "fastest_min": 13,
+     "lines": [
+      "ICE 40",
+      "ICE 41",
+      "ICE 42",
+      "ICE 43",
+      "ICE 45",
+      "ICE 47",
+      "ICE 49",
+      "ICE 78",
+      "ICE 79",
+      "S12",
+      "S19"
+     ],
+     "first": "00:28",
+     "last": "24:17"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 104,
+     "fastest_min": 12,
+     "lines": [
+      "ICE 40",
+      "ICE 41",
+      "ICE 62",
+      "S12",
+      "S19"
+     ],
+     "first": "00:28",
+     "last": "23:58"
+    },
+    "duesseldorf": {
+     "label": "Düsseldorf Hbf",
+     "trips_per_day": 27,
+     "fastest_min": 34,
+     "lines": [
+      "ICE 40",
+      "ICE 41",
+      "ICE 42",
+      "ICE 43",
+      "ICE 47",
+      "ICE 62",
+      "ICE 78"
+     ],
+     "first": "05:46",
+     "last": "22:54"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 47,
+     "fastest_min": 11,
+     "lines": [
+      "ICE 40",
+      "ICE 45",
+      "S19"
+     ],
+     "first": "00:37",
+     "last": "23:37"
+    }
+   }
+  },
+  {
+   "name": "Bonn Bad Godesberg",
+   "lat": 50.683918,
+   "lon": 7.159555,
+   "departures_per_day": 156,
+   "lines": [
+    "RB26",
+    "RB30",
+    "RB48",
+    "RE5"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 62,
+     "fastest_min": 33,
+     "lines": [
+      "RB26",
+      "RB48",
+      "RE5"
+     ],
+     "first": "04:24",
+     "last": "26:24"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 62,
+     "fastest_min": 39,
+     "lines": [
+      "RB26",
+      "RB48",
+      "RE5"
+     ],
+     "first": "04:24",
+     "last": "26:24"
+    },
+    "duesseldorf": {
+     "label": "Düsseldorf Hbf",
+     "trips_per_day": 16,
+     "fastest_min": 67,
+     "lines": [
+      "RE5"
+     ],
+     "first": "05:55",
+     "last": "20:55"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 6,
+     "fastest_min": 55,
+     "lines": [
+      "RB26"
+     ],
+     "first": "21:24",
+     "last": "26:24"
+    }
+   }
+  },
+  {
+   "name": "Bonn Gronau Un Campus",
+   "lat": 50.71453,
+   "lon": 7.11799,
+   "departures_per_day": 156,
+   "lines": [
+    "RB26",
+    "RB30",
+    "RB48",
+    "RE5"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 62,
+     "fastest_min": 29,
+     "lines": [
+      "RB26",
+      "RB48",
+      "RE5"
+     ],
+     "first": "04:28",
+     "last": "26:28"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 62,
+     "fastest_min": 35,
+     "lines": [
+      "RB26",
+      "RB48",
+      "RE5"
+     ],
+     "first": "04:28",
+     "last": "26:28"
+    },
+    "duesseldorf": {
+     "label": "Düsseldorf Hbf",
+     "trips_per_day": 16,
+     "fastest_min": 63,
+     "lines": [
+      "RE5"
+     ],
+     "first": "05:59",
+     "last": "20:59"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 6,
+     "fastest_min": 51,
+     "lines": [
+      "RB26"
+     ],
+     "first": "21:28",
+     "last": "26:28"
+    }
+   }
+  },
+  {
+   "name": "Meckenheim",
+   "lat": 50.62743,
+   "lon": 7.014737,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Meckenheim Industriepark",
+   "lat": 50.64365,
+   "lon": 7.027161,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Alfter Witterschlick",
+   "lat": 50.689686,
+   "lon": 7.026056,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Alfter Impekoven",
+   "lat": 50.711,
+   "lon": 7.019813,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Bonn Duisdorf",
+   "lat": 50.716465,
+   "lon": 7.042531,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Bonn Duisdorf Helmholtzstr.",
+   "lat": 50.72184,
+   "lon": 7.052592,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Bonn Endenich Nord",
+   "lat": 50.735577,
+   "lon": 7.062195,
+   "departures_per_day": 114,
+   "lines": [
+    "S23"
+   ],
+   "direct": {}
+  },
+  {
+   "name": "Bornheim Roisdorf",
+   "lat": 50.753166,
+   "lon": 7.016112,
+   "departures_per_day": 113,
+   "lines": [
+    "RB26",
+    "RB48"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 57,
+     "fastest_min": 25,
+     "lines": [
+      "RB26",
+      "RB48"
+     ],
+     "first": "03:37",
+     "last": "26:37"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 57,
+     "fastest_min": 31,
+     "lines": [
+      "RB26",
+      "RB48"
+     ],
+     "first": "03:37",
+     "last": "26:37"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 7,
+     "fastest_min": 42,
+     "lines": [
+      "RB26"
+     ],
+     "first": "03:37",
+     "last": "26:37"
+    }
+   }
+  },
+  {
+   "name": "Bonn Beuel",
+   "lat": 50.738464,
+   "lon": 7.127638,
+   "departures_per_day": 111,
+   "lines": [
+    "RB27",
+    "RE8",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 74,
+     "fastest_min": 32,
+     "lines": [
+      "RB27",
+      "RE8",
+      "S12",
+      "S19"
+     ],
+     "first": "00:00",
+     "last": "23:21"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 74,
+     "fastest_min": 24,
+     "lines": [
+      "RB27",
+      "RE8",
+      "S12",
+      "S19"
+     ],
+     "first": "00:00",
+     "last": "23:21"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 39,
+     "fastest_min": 18,
+     "lines": [
+      "RB27",
+      "S19"
+     ],
+     "first": "00:00",
+     "last": "23:00"
+    }
+   }
+  },
+  {
+   "name": "Bonn Vilich-Rheindorf Vilich",
+   "lat": 50.750893,
+   "lon": 7.129282,
+   "departures_per_day": 110,
+   "lines": [
+    "RB27",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 55,
+     "fastest_min": 30,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:03",
+     "last": "23:03"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 55,
+     "fastest_min": 26,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:03",
+     "last": "23:03"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 39,
+     "fastest_min": 16,
+     "lines": [
+      "RB27",
+      "S19"
+     ],
+     "first": "00:03",
+     "last": "23:03"
+    }
+   }
+  },
+  {
+   "name": "Bonn Lannesdorf Mehlem",
+   "lat": 50.669147,
+   "lon": 7.181312,
+   "departures_per_day": 99,
+   "lines": [
+    "RB26",
+    "RB30",
+    "RB48"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 44,
+     "fastest_min": 40,
+     "lines": [
+      "RB26",
+      "RB48"
+     ],
+     "first": "04:22",
+     "last": "26:22"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 44,
+     "fastest_min": 46,
+     "lines": [
+      "RB26",
+      "RB48"
+     ],
+     "first": "04:22",
+     "last": "26:22"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 6,
+     "fastest_min": 57,
+     "lines": [
+      "RB26"
+     ],
+     "first": "21:22",
+     "last": "26:22"
+    }
+   }
+  },
+  {
+   "name": "Troisdorf Friedrich-Wilhelms-Hütte",
+   "lat": 50.802036,
+   "lon": 7.159366,
+   "departures_per_day": 80,
+   "lines": [
+    "RB27",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 39,
+     "fastest_min": 25,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:09",
+     "last": "23:09"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 39,
+     "fastest_min": 21,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:09",
+     "last": "23:09"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 23,
+     "fastest_min": 11,
+     "lines": [
+      "RB27",
+      "S19"
+     ],
+     "first": "00:09",
+     "last": "23:09"
+    }
+   }
+  },
+  {
+   "name": "Sankt Augustin Menden",
+   "lat": 50.779915,
+   "lon": 7.149521,
+   "departures_per_day": 79,
+   "lines": [
+    "RB27",
+    "S12",
+    "S19"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 39,
+     "fastest_min": 28,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:06",
+     "last": "23:06"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 39,
+     "fastest_min": 24,
+     "lines": [
+      "RB27",
+      "S12",
+      "S19"
+     ],
+     "first": "00:06",
+     "last": "23:06"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 23,
+     "fastest_min": 14,
+     "lines": [
+      "RB27",
+      "S19"
+     ],
+     "first": "00:06",
+     "last": "23:06"
+    }
+   }
+  },
+  {
+   "name": "Bonn Oberkassel",
+   "lat": 50.715065,
+   "lon": 7.159285,
+   "departures_per_day": 74,
+   "lines": [
+    "RB27",
+    "RE8"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 37,
+     "fastest_min": 36,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:42",
+     "last": "23:17"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 37,
+     "fastest_min": 28,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:42",
+     "last": "23:17"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 18,
+     "fastest_min": 24,
+     "lines": [
+      "RB27"
+     ],
+     "first": "00:42",
+     "last": "21:42"
+    }
+   }
+  },
+  {
+   "name": "Königswinter Niederdollendorf",
+   "lat": 50.69507,
+   "lon": 7.180962,
+   "departures_per_day": 74,
+   "lines": [
+    "RB27",
+    "RE8"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 37,
+     "fastest_min": 39,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:39",
+     "last": "23:14"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 37,
+     "fastest_min": 31,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:39",
+     "last": "23:14"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 18,
+     "fastest_min": 27,
+     "lines": [
+      "RB27"
+     ],
+     "first": "00:39",
+     "last": "21:39"
+    }
+   }
+  },
+  {
+   "name": "Königswinter",
+   "lat": 50.678627,
+   "lon": 7.193574,
+   "departures_per_day": 74,
+   "lines": [
+    "RB27",
+    "RE8"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 37,
+     "fastest_min": 41,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:37",
+     "last": "23:12"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 37,
+     "fastest_min": 33,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:37",
+     "last": "23:12"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 18,
+     "fastest_min": 29,
+     "lines": [
+      "RB27"
+     ],
+     "first": "00:37",
+     "last": "21:37"
+    }
+   }
+  },
+  {
+   "name": "Bad Honnef Rhöndorf",
+   "lat": 50.657867,
+   "lon": 7.210193,
+   "departures_per_day": 74,
+   "lines": [
+    "RB27",
+    "RE8"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 37,
+     "fastest_min": 45,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:33",
+     "last": "23:08"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 37,
+     "fastest_min": 37,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "00:33",
+     "last": "23:08"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 18,
+     "fastest_min": 33,
+     "lines": [
+      "RB27"
+     ],
+     "first": "00:33",
+     "last": "21:33"
+    }
+   }
+  },
+  {
+   "name": "Bad Honnef",
+   "lat": 50.63976,
+   "lon": 7.219508,
+   "departures_per_day": 73,
+   "lines": [
+    "RB27",
+    "RE8"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 36,
+     "fastest_min": 47,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "05:06",
+     "last": "23:06"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 36,
+     "fastest_min": 39,
+     "lines": [
+      "RB27",
+      "RE8"
+     ],
+     "first": "05:06",
+     "last": "23:06"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 17,
+     "fastest_min": 35,
+     "lines": [
+      "RB27"
+     ],
+     "first": "05:33",
+     "last": "21:31"
+    }
+   }
+  },
+  {
+   "name": "Remagen Rolandseck",
+   "lat": 50.63137,
+   "lon": 7.206815,
+   "departures_per_day": 46,
+   "lines": [
+    "RB26"
+   ],
+   "direct": {
+    "koeln": {
+     "label": "Köln Hbf",
+     "trips_per_day": 23,
+     "fastest_min": 44,
+     "lines": [
+      "RB26"
+     ],
+     "first": "04:18",
+     "last": "26:18"
+    },
+    "koeln_deutz": {
+     "label": "Köln Messe/Deutz",
+     "trips_per_day": 23,
+     "fastest_min": 50,
+     "lines": [
+      "RB26"
+     ],
+     "first": "04:18",
+     "last": "26:18"
+    },
+    "airport": {
+     "label": "Köln/Bonn Flughafen",
+     "trips_per_day": 6,
+     "fastest_min": 61,
+     "lines": [
+      "RB26"
+     ],
+     "first": "21:18",
+     "last": "26:18"
+    }
+   }
+  }
+ ]
+}
